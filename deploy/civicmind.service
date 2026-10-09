@@ -1,0 +1,17 @@
+# CivicMind — example systemd unit for a VPS deployment.
+# Copy to /etc/systemd/system/civicmind.service and adjust paths/user.
+[Unit]
+Description=CivicMind (FastAPI)
+After=network.target
+
+[Service]
+User=www-data
+WorkingDirectory=/opt/civicmind/backend
+Environment="SARVAM_API_KEY=sk_replace_me"
+Environment="CIVICMIND_SECRET=replace_with_long_random_string"
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

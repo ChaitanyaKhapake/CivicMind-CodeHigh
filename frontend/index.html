@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>CivicMind — From complaints to incidents</title>
+<link rel="icon" href="assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="index.html">
+      <img src="assets/logo.svg" alt="CivicMind"/> Civic<span style="color:var(--orange)">Mind</span>
+    </a>
+    <div class="nav-right">
+      <span class="badge" style="background:var(--orange-050);color:var(--orange-600)">Build with भारत 4.0</span>
+      <a class="btn sm" href="#login">Sign in</a>
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="eyebrow">AI-powered civic incident intelligence</div>
+      <h1>The city sees complaints.<br/>CivicMind finds the <span class="hl">incident</span>.</h1>
+      <p class="lede">Scattered citizen reports are fused into one explainable civic incident — then investigated, prioritised, acted on and <strong>verified resolved</strong>. Not a ticket system. An incident intelligence platform.</p>
+      <div class="row wrap-row" style="margin-top:20px">
+        <a class="btn primary" href="#login">Report an issue →</a>
+        <a class="btn" href="map.html">View live city map</a>
+      </div>
+      <div class="stat-strip" style="margin-top:30px">
+        <div class="s"><div class="n" id="sComplaints">0</div><div class="l">Citizen reports</div></div>
+        <div class="s"><div class="n" id="sIncidents">0</div><div class="l">Fused incidents</div></div>
+        <div class="s"><div class="n" id="sCats">—</div><div class="l">Civic categories</div></div>
+        <div class="s"><div class="n" id="sAI">—</div><div class="l">AI engine</div></div>
+      </div>
+    </div>
+
+    <div class="auth-card" id="login">
+      <h3 id="authTitle">Sign in</h3>
+      <p class="small muted" id="authSub">Citizens report civic issues. Officers and admins sign in with their own credentials.</p>
+
+      <form id="loginForm" autocomplete="off">
+        <div class="field">
+          <label class="f">Email</label>
+          <input type="email" id="email" placeholder="you@example.com" required/>
+        </div>
+        <div class="field">
+          <label class="f">Password</label>
+          <input type="password" id="password" placeholder="••••••••" required/>
+        </div>
+        <button class="btn primary block" id="loginBtn" type="submit">Sign in</button>
+      </form>
+
+      <div class="divider"></div>
+      <div class="small center muted">
+        New here? <a href="#" id="showRegister" style="color:var(--orange);font-weight:700">Create a citizen account</a>
+      </div>
+      <form id="registerForm" style="display:none">
+        <div class="field"><label class="f">Full name</label><input id="rName" required/></div>
+        <div class="field"><label class="f">Email</label><input type="email" id="rEmail" required/></div>
+        <div class="field"><label class="f">Password</label><input type="password" id="rPass" required/></div>
+        <div class="field"><label class="f">Ward / area (optional)</label><input id="rWard" placeholder="e.g. Kothrud"/></div>
+        <button class="btn primary block" type="submit">Create account</button>
+      </form>
+
+      <div id="demoBox" style="display:none">
+        <div class="divider"></div>
+        <div class="tiny muted" style="margin-bottom:8px">Demo accounts — click to fill the form:</div>
+        <div class="pill-list" id="demoFill"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="wrap page">
+  <div class="center" style="max-width:720px;margin:10px auto 34px">
+    <div class="eyebrow">Detect → Investigate → Prioritize → Act → Verify</div>
+    <h2>One workflow from report to proof</h2>
+    <p class="muted">CivicMind does not just manage complaints; it discovers the real incidents hiding behind them.</p>
+  </div>
+
+  <div class="steps" style="margin-bottom:40px">
+    <div class="step-card"><div class="n">1</div><div class="t">Detect</div><div class="d">Fuse related reports</div></div>
+    <div class="step-card"><div class="n">2</div><div class="t">Investigate</div><div class="d">Explain the evidence</div></div>
+    <div class="step-card"><div class="n">3</div><div class="t">Prioritize</div><div class="d">Score urgency & impact</div></div>
+    <div class="step-card"><div class="n">4</div><div class="t">Act</div><div class="d">Approve the response</div></div>
+    <div class="step-card"><div class="n">5</div><div class="t">Verify</div><div class="d">Prove it improved</div></div>
+  </div>
+
+  <div class="grid g3">
+    <div class="feature-card">
+      <div class="fi" style="background:var(--orange-050)">🧩</div>
+      <h3>Incident Fusion</h3>
+      <p class="small muted">Combines multiple weak signals — location, time and category — into one explainable incident.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fi" style="background:var(--blue-050)">🔎</div>
+      <h3>AI Investigation</h3>
+      <p class="small muted">Sarvam AI explains why reports are linked, the probable cause and what an officer should check next.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fi" style="background:var(--purple-050)">📊</div>
+      <h3>Priority Engine</h3>
+      <p class="small muted">Severity, affected population, spread and duration combine into a transparent priority score.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fi" style="background:var(--green-050)">✅</div>
+      <h3>Resolution Verification</h3>
+      <p class="small muted">Before-and-after signals confirm whether the real-world problem was actually solved.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fi" style="background:var(--orange-050)">🗺️</div>
+      <h3>Smart City Map</h3>
+      <p class="small muted">Complaint markers, incident clusters, severity and affected-area visualisation on one live map.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fi" style="background:var(--blue-050)">⚡</div>
+      <h3>Real-time Tracking</h3>
+      <p class="small muted">Citizens watch their report move from submitted to resolved, live, on their own dashboard.</p>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:34px;background:linear-gradient(120deg,var(--orange-050),var(--surface));border-color:var(--orange-100)">
+    <div class="row spread wrap-row">
+      <div>
+        <h3 style="margin-bottom:4px">Team CodeHigh · MIT ADT Pune</h3>
+        <p class="small muted" style="margin:0">Spparsh Mansuke &nbsp;·&nbsp; Chaitanya Khapake &nbsp;—&nbsp; Problem statement: Sustainability & Social Impact.</p>
+      </div>
+      <span class="badge" style="background:var(--surface);color:var(--ink-2)">Prototype · live municipal demo</span>
+    </div>
+  </div>
+</main>
+
+<script src="js/api.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

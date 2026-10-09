@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Database & uploads (regenerated automatically)
+backend/civicmind.db
+backend/civicmind.db-wal
+backend/civicmind.db-shm
+uploads/*
+
+# Env
+.env
+
+# OS
+.DS_Store

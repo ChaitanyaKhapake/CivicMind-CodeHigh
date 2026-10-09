@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Admin · CivicMind</title>
+<link rel="icon" href="assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+<header class="nav" id="nav"></header>
+
+<main class="wrap page">
+  <div class="row spread wrap-row">
+    <div>
+      <div class="eyebrow">Administration</div>
+      <h1 style="margin-bottom:2px">Manage CivicMind</h1>
+      <p class="muted small" style="margin:0">Users, roles, categories and prototype data.</p>
+    </div>
+    <button class="btn red" onclick="resetData()">↻ Reset civic data</button>
+  </div>
+
+  <div class="grid g4" style="margin-top:22px">
+    <div class="card metric orange"><div class="icon-badge">👤</div><div class="k">Users</div><div class="v" id="aUsers">—</div></div>
+    <div class="card metric blue"><div class="icon-badge">📨</div><div class="k">Complaints</div><div class="v" id="aComplaints">—</div></div>
+    <div class="card metric purple"><div class="icon-badge">⚠️</div><div class="k">Incidents</div><div class="v" id="aIncidents">—</div></div>
+    <div class="card metric green"><div class="icon-badge">✅</div><div class="k">Resolutions</div><div class="v" id="aResolutions">—</div></div>
+  </div>
+
+  <div class="detail-grid" style="margin-top:18px">
+    <div class="card flush">
+      <div class="card-h" style="padding:18px 20px 12px;margin:0"><h3>Users & roles</h3></div>
+      <div style="overflow:auto">
+        <table class="table" id="usersTable">
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Ward</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-h"><h3>Add a user</h3></div>
+        <form id="addUser">
+          <div class="field"><label class="f">Name</label><input id="uName" required/></div>
+          <div class="field"><label class="f">Email</label><input type="email" id="uEmail" required/></div>
+          <div class="grid g2" style="gap:10px">
+            <div class="field"><label class="f">Password</label><input id="uPass" required/></div>
+            <div class="field"><label class="f">Role</label><select id="uRole"><option>citizen</option><option>officer</option><option>admin</option></select></div>
+          </div>
+          <div class="grid g2" style="gap:10px">
+            <div class="field"><label class="f">Department</label><input id="uDept" placeholder="optional"/></div>
+            <div class="field"><label class="f">Ward</label><input id="uWard" placeholder="optional"/></div>
+          </div>
+          <button class="btn primary block" type="submit">Create user</button>
+        </form>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Configuration</h3></div>
+        <div class="eyebrow">Complaint categories</div>
+        <div class="pill-list" id="cfgCats" style="margin:8px 0 16px"></div>
+        <div class="eyebrow">Departments</div>
+        <div class="pill-list" id="cfgDepts" style="margin-top:8px"></div>
+      </div>
+    </div>
+  </div>
+  <div class="section-title"><h2>Citizen complaints</h2><span class="badge" id="acCount">0</span></div>
+  <div class="card flush">
+    <div style="overflow:auto;max-height:460px">
+      <table class="table" id="acTable">
+        <thead><tr><th>Complaint</th><th>Citizen</th><th>Category</th><th>Ward</th><th>Proof photo</th><th>AI evidence</th><th>Status</th><th>When</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="section-title"><h2>Officer responses &amp; resolutions</h2><span class="badge" id="arCount">0</span></div>
+  <div class="card flush">
+    <div style="overflow:auto;max-height:460px">
+      <table class="table" id="arTable">
+        <thead><tr><th>Incident</th><th>Officer</th><th>Before → After</th><th>Reduction</th><th>AI proof check</th><th>Proof</th><th>Status</th><th>When</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

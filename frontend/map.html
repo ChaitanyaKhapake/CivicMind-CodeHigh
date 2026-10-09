@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Live City Map · CivicMind</title>
+<link rel="icon" href="assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+<header class="nav" id="nav"></header>
+
+<div class="map-shell">
+  <div class="map-overlay">
+    <div class="row spread" style="margin-bottom:10px">
+      <strong>Live city map</strong>
+      <span class="live-dot">live</span>
+    </div>
+    <div class="field" style="margin-bottom:10px">
+      <label class="f">Category</label>
+      <select id="fCategory"><option value="">All categories</option></select>
+    </div>
+    <div class="grid g2" style="gap:8px">
+      <div class="field" style="margin:0">
+        <label class="f">Severity</label>
+        <select id="fSeverity"><option value="">Any</option><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select>
+      </div>
+      <div class="field" style="margin:0">
+        <label class="f">Status</label>
+        <select id="fStatus"><option value="">Any</option><option value="submitted">Submitted</option><option value="clustered">Clustered</option><option value="in_progress">In progress</option><option value="resolved">Resolved</option></select>
+      </div>
+    </div>
+    <div class="divider" style="margin:12px 0"></div>
+    <label class="row" style="gap:8px;font-weight:600;font-size:.86rem"><input type="checkbox" id="layComplaints" checked style="width:auto"/> Show complaint reports</label>
+    <label class="row" style="gap:8px;font-weight:600;font-size:.86rem;margin-top:6px"><input type="checkbox" id="layIncidents" checked style="width:auto"/> Show fused incidents</label>
+    <div class="divider" style="margin:12px 0"></div>
+    <div class="row spread small"><span class="muted">Complaints</span><strong id="cCount">0</strong></div>
+    <div class="row spread small"><span class="muted">Incidents</span><strong id="iCount">0</strong></div>
+    <button class="btn sm block" style="margin-top:10px" onclick="loadAll()">↻ Refresh</button>
+  </div>
+
+  <div class="map-legend">
+    <div style="font-weight:800;margin-bottom:6px;font-size:.78rem">SEVERITY</div>
+    <div class="lrow"><span class="swatch" style="background:#2E9E5B"></span>1 — Low</div>
+    <div class="lrow"><span class="swatch" style="background:#8BC34A"></span>2</div>
+    <div class="lrow"><span class="swatch" style="background:#E0A106"></span>3 — Moderate</div>
+    <div class="lrow"><span class="swatch" style="background:#E8551E"></span>4 — High</div>
+    <div class="lrow"><span class="swatch" style="background:#D9342B"></span>5 — Severe</div>
+    <div class="lrow" style="margin-top:6px"><span class="swatch" style="background:rgba(232,85,30,.18);border:1px solid #E8551E"></span>Incident area</div>
+  </div>
+
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/map.js"></script>
+</body>
+</html>

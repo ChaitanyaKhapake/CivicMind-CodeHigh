@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Citizen Dashboard · CivicMind</title>
+<link rel="icon" href="assets/favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="css/style.css"/>
+</head>
+<body>
+<header class="nav" id="nav"></header>
+
+<main class="wrap page">
+  <div class="row spread wrap-row">
+    <div>
+      <div class="eyebrow">Citizen dashboard</div>
+      <h1 style="margin-bottom:2px">Hello, <span id="userName">there</span> 👋</h1>
+      <p class="muted small" style="margin:0">Report a civic issue and watch it get resolved — live.</p>
+    </div>
+    <div class="row">
+      <span class="live-dot" id="liveDot">Live updates on</span>
+      <a class="btn sm" href="map.html">Open city map</a>
+    </div>
+  </div>
+
+  <div class="grid g4" style="margin-top:22px">
+    <div class="card metric orange"><div class="icon-badge">📝</div><div class="k">My complaints</div><div class="v" id="mMine">—</div></div>
+    <div class="card metric blue"><div class="icon-badge">⚙️</div><div class="k">In progress</div><div class="v" id="mProgress">—</div></div>
+    <div class="card metric green"><div class="icon-badge">✅</div><div class="k">Resolved</div><div class="v" id="mResolved">—</div></div>
+    <div class="card metric purple"><div class="icon-badge">🧩</div><div class="k">Incidents I joined</div><div class="v" id="mJoined">—</div></div>
+  </div>
+
+  <div class="detail-grid" style="margin-top:22px">
+    <!-- report form -->
+    <div class="card">
+      <div class="card-h"><h3>Report a new civic issue</h3><span class="badge" style="background:var(--orange-050);color:var(--orange-600)">AI-classified</span></div>
+      <form id="reportForm">
+        <div class="grid g2">
+          <div class="field">
+            <label class="f">Category</label>
+            <select id="category"></select>
+          </div>
+          <div class="field">
+            <label class="f">Photo of the issue <span style="color:var(--red)">*</span></label>
+            <input type="file" id="photo" accept="image/*" required/>
+            <div class="hint">Required — the AI checks this as proof of the issue.</div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="f">Describe the issue</label>
+          <textarea id="description" placeholder="e.g. Water is leaking continuously from a pipeline near the main road…" required></textarea>
+          <div class="hint">Sarvam AI reads this and suggests the category, severity and responsible department.</div>
+        </div>
+        <div class="field">
+          <label class="f">Location</label>
+          <div id="pickmap" style="height:210px;border-radius:12px;border:1px solid var(--line-2)"></div>
+          <div class="row spread" style="margin-top:8px">
+            <span class="hint" id="locText">Tap the map to drop a pin · auto-detects your ward</span>
+            <button type="button" class="btn sm ghost" id="geoBtn">📍 Use my location</button>
+          </div>
+        </div>
+        <button class="btn primary block" id="submitBtn" type="submit">Submit complaint</button>
+      </form>
+      <div id="aiResult" style="display:none;margin-top:16px"></div>
+    </div>
+
+    <!-- live feed -->
+    <div>
+      <div class="card" style="margin-bottom:18px">
+        <div class="card-h"><h3>Live updates</h3><span class="live-dot">streaming</span></div>
+        <div class="list" id="liveFeed"><div class="empty small">Waiting for updates…</div></div>
+      </div>
+      <div class="card">
+        <div class="card-h"><h3>Quick track</h3></div>
+        <p class="small muted">Have a complaint ID? Track it without logging in.</p>
+        <div class="row">
+          <input id="trackId" placeholder="CMP-00001" style="flex:1"/>
+          <button class="btn sm" onclick="trackComplaint()">Track</button>
+        </div>
+        <div id="trackResult" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-title"><h2>My complaints</h2><span class="badge" id="mineCount">0</span></div>
+  <div class="grid" id="myComplaints"></div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="js/api.js"></script>
+<script src="js/common.js"></script>
+<script src="js/citizen.js"></script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+{
+  "city_name": "Pune",
+  "city_center": {
+    "lat": 18.5204,
+    "lng": 73.8567
+  },
+  "categories": [
+    "Water Leakage",
+    "Low Water Pressure",
+    "Garbage Accumulation",
+    "Pothole",
+    "Road Damage",
+    "Streetlight Failure",
+    "Drainage Issue",
+    "Fallen Tree",
+    "Traffic Signal Failure",
+    "Air/Noise Pollution",
+    "Sewage Overflow",
+    "Encroachment",
+    "Other"
+  ],
+  "departments": {
+    "Water Leakage": "Water Supply Department",
+    "Low Water Pressure": "Water Supply Department",
+    "Garbage Accumulation": "Sanitation Department",
+    "Pothole": "Public Works (Roads)",
+    "Road Damage": "Public Works (Roads)",
+    "Streetlight Failure": "Electrical Department",
+    "Traffic Signal Failure": "Traffic & Signals Cell",
+    "Drainage Issue": "Drainage Department",
+    "Sewage Overflow": "Drainage Department",
+    "Fallen Tree": "Garden & Tree Authority",
+    "Air/Noise Pollution": "Environment Department",
+    "Encroachment": "Anti-Encroachment Cell",
+    "Other": "General Grievance Cell"
+  },
+  "wards": [
+    {
+      "ward": "Shivajinagar",
+      "lat": 18.5308,
+      "lng": 73.8478,
+      "zone": "Central"
+    },
+    {
+      "ward": "Deccan",
+      "lat": 18.514,
+      "lng": 73.8415,
+      "zone": "Central"
+    },
+    {
+      "ward": "Camp",
+      "lat": 18.5122,
+      "lng": 73.8785,
+      "zone": "Central"
+    },
+    {
+      "ward": "Kothrud",
+      "lat": 18.5074,
+      "lng": 73.8077,
+      "zone": "West"
+    },
+    {
+      "ward": "Warje",
+      "lat": 18.4855,
+      "lng": 73.8009,
+      "zone": "West"
+    },
+    {
+      "ward": "Baner",
+      "lat": 18.559,
+      "lng": 73.7868,
+      "zone": "West"
+    },
+    {
+      "ward": "Aundh",
+      "lat": 18.559,
+      "lng": 73.8077,
+      "zone": "West"
+    },
+    {
+      "ward": "Wakad",
+      "lat": 18.5975,
+      "lng": 73.7625,
+      "zone": "West"
+    },
+    {
+      "ward": "Hinjewadi",
+      "lat": 18.5913,
+      "lng": 73.7389,
+      "zone": "West"
+    },
+    {
+      "ward": "Kharadi",
+      "lat": 18.5515,
+      "lng": 73.9436,
+      "zone": "East"
+    },
+    {
+      "ward": "Viman Nagar",
+      "lat": 18.5679,
+      "lng": 73.9143,
+      "zone": "East"
+    },
+    {
+      "ward": "Hadapsar",
+      "lat": 18.5089,
+      "lng": 73.926,
+      "zone": "East"
+    },
+    {
+      "ward": "Magarpatta",
+      "lat": 18.5158,
+      "lng": 73.928,
+      "zone": "East"
+    },
+    {
+      "ward": "Yerawada",
+      "lat": 18.5515,
+      "lng": 73.8837,
+      "zone": "East"
+    },
+    {
+      "ward": "Katraj",
+      "lat": 18.4529,
+      "lng": 73.8576,
+      "zone": "South"
+    },
+    {
+      "ward": "Kondhwa",
+      "lat": 18.4634,
+      "lng": 73.8895,
+      "zone": "South"
+    },
+    {
+      "ward": "Sinhagad Road",
+      "lat": 18.4724,
+      "lng": 73.8251,
+      "zone": "South"
+    },
+    {
+      "ward": "Pimpri",
+      "lat": 18.6298,
+      "lng": 73.7997,
+      "zone": "North"
+    },
+    {
+      "ward": "Chinchwad",
+      "lat": 18.6279,
+      "lng": 73.8009,
+      "zone": "North"
+    },
+    {
+      "ward": "Nigdi",
+      "lat": 18.6512,
+      "lng": 73.7619,
+      "zone": "North"
+    }
+  ],
+  "demo_accounts": [
+    {
+      "role": "citizen",
+      "name": "Demo Citizen",
+      "email": "citizen@civicmind.in",
+      "password": "citizen123"
+    },
+    {
+      "role": "officer",
+      "name": "Demo Officer",
+      "email": "officer@civicmind.in",
+      "password": "officer123"
+    },
+    {
+      "role": "admin",
+      "name": "Demo Admin",
+      "email": "admin@civicmind.in",
+      "password": "admin123"
+    }
+  ],
+  "expose_demo_credentials": true,
+  "priority_thresholds": {
+    "critical": 80,
+    "high": 60,
+    "medium": 40
+  },
+  "cluster": {
+    "radius_km": 1.5,
+    "window_hours": 48,
+    "min_size": 3
+  }
+}
