@@ -1,0 +1,16 @@
+# Never ship secrets, databases, private evidence or local tooling in the image
+.env
+.env.*
+!.env.example
+**/.secret_key
+**/*.db
+**/*.db-wal
+**/*.db-shm
+private/
+uploads/
+data/demo/
+.git/
+**/__pycache__/
+**/.pytest_cache/
+backend/tests/
+*.docx

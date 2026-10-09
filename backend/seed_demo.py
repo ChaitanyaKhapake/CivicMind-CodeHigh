@@ -180,6 +180,10 @@ def main():
     sample = os.path.join(os.path.dirname(db_path), "sample_proof_photo.jpg")
     if not os.path.exists(sample):
         _photo_data_url(424242, path=sample)
+    blank = os.path.join(os.path.dirname(db_path), "blank_test_photo.png")
+    if not os.path.exists(blank):  # for showing that blank proof photos are rejected
+        from PIL import Image
+        Image.new("RGB", (640, 480), (128, 128, 128)).save(blank)
 
     print("\nDemo database ready:", db_path)
     print("  incidents:", query("SELECT COUNT(*) c FROM incidents", one=True)["c"],
@@ -189,6 +193,7 @@ def main():
           f"(scan: {summary})")
     print("  logins:", cred_file)
     print("  synthetic proof photo for the officer step:", sample)
+    print("  blank photo (should be REJECTED as proof):", blank)
 
 
 if __name__ == "__main__":

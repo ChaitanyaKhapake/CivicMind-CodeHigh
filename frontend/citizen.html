@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Citizen Dashboard · CivicMind</title>
+<title>Report &amp; track · CivicMind</title>
 <link rel="icon" href="assets/favicon.svg"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -16,77 +16,79 @@
 <main class="wrap page">
   <div class="row spread wrap-row">
     <div>
-      <div class="eyebrow">Citizen dashboard</div>
-      <h1 style="margin-bottom:2px">Hello, <span id="userName">there</span> 👋</h1>
-      <p class="muted small" style="margin:0">Report a civic issue and watch it get resolved — live.</p>
+      <div class="eyebrow">Citizen</div>
+      <h1 style="margin-bottom:2px">Hello, <span id="userName">there</span></h1>
+      <p class="muted small" style="margin:0">Report a civic problem and follow it until it's resolved.</p>
     </div>
-    <div class="row">
-      <span class="live-dot" id="liveDot">Live updates on</span>
-      <a class="btn sm" href="map.html">Open city map</a>
-    </div>
+    <span class="live-dot" id="liveDot">Connecting…</span>
   </div>
 
   <div class="grid g4" style="margin-top:22px">
-    <div class="card metric orange"><div class="icon-badge">📝</div><div class="k">My complaints</div><div class="v" id="mMine">—</div></div>
-    <div class="card metric blue"><div class="icon-badge">⚙️</div><div class="k">In progress</div><div class="v" id="mProgress">—</div></div>
-    <div class="card metric green"><div class="icon-badge">✅</div><div class="k">Resolved</div><div class="v" id="mResolved">—</div></div>
-    <div class="card metric purple"><div class="icon-badge">🧩</div><div class="k">Incidents I joined</div><div class="v" id="mJoined">—</div></div>
+    <div class="card metric orange"><div class="k">My reports</div><div class="v" id="mMine">—</div></div>
+    <div class="card metric blue"><div class="k">Being handled</div><div class="v" id="mProgress">—</div></div>
+    <div class="card metric green"><div class="k">Resolved</div><div class="v" id="mResolved">—</div></div>
+    <div class="card metric purple"><div class="k">Incidents I'm part of</div><div class="v" id="mJoined">—</div></div>
   </div>
 
   <div class="detail-grid" style="margin-top:22px">
-    <!-- report form -->
-    <div class="card">
-      <div class="card-h"><h3>Report a new civic issue</h3><span class="badge" style="background:var(--orange-050);color:var(--orange-600)">AI-classified</span></div>
-      <form id="reportForm">
+    <section class="card" aria-labelledby="reportTitle">
+      <div class="card-h"><h3 id="reportTitle">Report a civic issue</h3></div>
+      <form id="reportForm" novalidate>
         <div class="grid g2">
           <div class="field">
-            <label class="f">Category</label>
-            <select id="category"></select>
+            <label class="f" for="category">Category</label>
+            <select id="category" required><option value="">Choose a category…</option></select>
           </div>
           <div class="field">
-            <label class="f">Photo of the issue <span style="color:var(--red)">*</span></label>
-            <input type="file" id="photo" accept="image/*" required/>
-            <div class="hint">Required — the AI checks this as proof of the issue.</div>
+            <label class="f" for="photo">Photo <span class="muted" id="photoReq">(optional)</span></label>
+            <input type="file" id="photo" accept="image/jpeg,image/png,image/webp"/>
+            <div class="hint">JPEG, PNG or WebP, up to 5 MB. Location data inside the photo is removed.</div>
           </div>
         </div>
         <div class="field">
-          <label class="f">Describe the issue</label>
-          <textarea id="description" placeholder="e.g. Water is leaking continuously from a pipeline near the main road…" required></textarea>
-          <div class="hint">Sarvam AI reads this and suggests the category, severity and responsible department.</div>
+          <label class="f" for="description">What is the problem?</label>
+          <textarea id="description" required minlength="10" maxlength="2000"
+            placeholder="e.g. The streetlight outside the school gate has been off for three nights."></textarea>
+          <div class="hint"><span id="descCount">0</span>/2000 · at least 10 characters</div>
         </div>
         <div class="field">
-          <label class="f">Location</label>
-          <div id="pickmap" style="height:210px;border-radius:12px;border:1px solid var(--line-2)"></div>
-          <div class="row spread" style="margin-top:8px">
-            <span class="hint" id="locText">Tap the map to drop a pin · auto-detects your ward</span>
+          <label class="f" for="address">Landmark / address (optional)</label>
+          <input id="address" maxlength="300" placeholder="e.g. Near the bus stop, Lane 3"/>
+        </div>
+        <div class="field">
+          <span class="f">Location</span>
+          <div id="pickmap" class="pick-map" role="application" aria-label="Map: tap to set the issue location"></div>
+          <div class="row spread wrap-row" style="margin-top:8px">
+            <span class="hint" id="locText">Tap the map or drag the pin to the exact spot.</span>
             <button type="button" class="btn sm ghost" id="geoBtn">📍 Use my location</button>
           </div>
         </div>
-        <button class="btn primary block" id="submitBtn" type="submit">Submit complaint</button>
+        <div class="form-error" id="formError" role="alert" hidden></div>
+        <button class="btn primary block" id="submitBtn" type="submit">Submit report</button>
       </form>
-      <div id="aiResult" style="display:none;margin-top:16px"></div>
-    </div>
+      <div id="result" aria-live="polite"></div>
+    </section>
 
-    <!-- live feed -->
-    <div>
-      <div class="card" style="margin-bottom:18px">
-        <div class="card-h"><h3>Live updates</h3><span class="live-dot">streaming</span></div>
-        <div class="list" id="liveFeed"><div class="empty small">Waiting for updates…</div></div>
-      </div>
-      <div class="card">
-        <div class="card-h"><h3>Quick track</h3></div>
-        <p class="small muted">Have a complaint ID? Track it without logging in.</p>
-        <div class="row">
-          <input id="trackId" placeholder="CMP-00001" style="flex:1"/>
-          <button class="btn sm" onclick="trackComplaint()">Track</button>
-        </div>
-        <div id="trackResult" style="margin-top:12px"></div>
-      </div>
-    </div>
+    <aside>
+      <section class="card" style="margin-bottom:18px">
+        <div class="card-h"><h3>Updates</h3></div>
+        <div class="list" id="liveFeed"><div class="empty small">Loading…</div></div>
+      </section>
+      <section class="card">
+        <div class="card-h"><h3>Track with a code</h3></div>
+        <p class="small muted">Use the private tracking code you received after reporting. It shows status only — share it only with people you trust.</p>
+        <form class="row" id="trackForm">
+          <label class="sr-only" for="trackId">Tracking code</label>
+          <input id="trackId" placeholder="e.g. 7KQ4X9MPRA" maxlength="16" style="flex:1" autocomplete="off"/>
+          <button class="btn sm" type="submit">Track</button>
+        </form>
+        <div id="trackResult" style="margin-top:12px" aria-live="polite"></div>
+      </section>
+    </aside>
   </div>
 
-  <div class="section-title"><h2>My complaints</h2><span class="badge" id="mineCount">0</span></div>
-  <div class="grid" id="myComplaints"></div>
+  <div class="section-title"><h2>My reports</h2><span class="badge" id="mineCount">0</span></div>
+  <div class="grid" id="myComplaints"><div class="card empty">Loading…</div></div>
 </main>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

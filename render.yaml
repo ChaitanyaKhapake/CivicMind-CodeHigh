@@ -1,14 +1,21 @@
-# Render blueprint — deploy CivicMind as a Python web service.
-# Push this repo to GitHub, then in Render: New + > Blueprint > pick the repo.
+# Render blueprint — CivicMind as a Python web service. Deploy only when you
+# intend to publish it. NOTE: on Render's free plan the filesystem is
+# EPHEMERAL — the SQLite database and uploaded photos are lost on every
+# redeploy/restart. Attach a persistent disk (paid) and point CIVICMIND_DB /
+# CIVICMIND_EVIDENCE_DIR at it for anything beyond a throwaway demo.
 services:
   - type: web
     name: civicmind
     runtime: python
     plan: free
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers
     envVars:
-      - key: SARVAM_API_KEY
-        sync: false          # set the value in the Render dashboard
       - key: CIVICMIND_SECRET
         generateValue: true
+      - key: SARVAM_API_KEY
+        sync: false          # optional; set in the Render dashboard
+      - key: CIVICMIND_ADMIN_EMAIL
+        sync: false          # creates this admin on first start if missing
+      - key: CIVICMIND_ADMIN_PASSWORD
+        sync: false          # >= 12 characters

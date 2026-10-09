@@ -1,88 +1,90 @@
-/* CivicMind — landing + auth logic (no hardcoded accounts or role tabs) */
+/* CivicMind — landing + sign-in / registration */
+const $ = (id) => document.getElementById(id);
 
-document.getElementById('loginForm').addEventListener('submit', async (e) => {
+function showError(el, msg) { el.textContent = msg; el.hidden = !msg; }
+
+function setTab(register) {
+  $('loginForm').hidden = register;
+  $('registerForm').hidden = !register;
+  $('tabLogin').classList.toggle('active', !register);
+  $('tabRegister').classList.toggle('active', register);
+  $('tabLogin').setAttribute('aria-selected', String(!register));
+  $('tabRegister').setAttribute('aria-selected', String(register));
+}
+$('tabLogin').addEventListener('click', () => setTab(false));
+$('tabRegister').addEventListener('click', () => setTab(true));
+
+function safeHome(home) {
+  // Only follow same-origin, known pages returned by the server.
+  return ['/citizen.html', '/dashboard.html', '/admin.html'].includes(home) ? home.slice(1) : 'index.html';
+}
+
+$('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const btn = document.getElementById('loginBtn');
-  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Signing in…';
-  try {
-    const d = await CM.api('/api/auth/login', { method: 'POST', body: {
-      email: document.getElementById('email').value,
-      password: document.getElementById('password').value,
-    }});
-    CM.setSession(d.token, d.user);
-    CM.toast(`Welcome, ${d.user.name.split(' ')[0]}`, 'ok');
-    setTimeout(() => location.href = d.home, 400);
-  } catch (err) {
-    CM.toast(err.message, 'err');
-    btn.disabled = false; btn.textContent = 'Sign in';
-  }
+  const email = $('email').value.trim(), password = $('password').value;
+  showError($('loginError'), '');
+  if (!email || !password) return showError($('loginError'), 'Enter your email and password.');
+  await CM.busy($('loginBtn'), 'Signing in…', async () => {
+    try {
+      const d = await CM.api('/api/auth/login', { method: 'POST', body: { email, password } });
+      CM.setSession(d.token, d.user);
+      location.href = safeHome(d.home);
+    } catch (err) { showError($('loginError'), err.message); }
+  });
 });
 
-document.getElementById('showRegister').onclick = (e) => {
+$('registerForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const f = document.getElementById('registerForm');
-  f.style.display = f.style.display === 'none' ? 'block' : 'none';
-};
-
-document.getElementById('registerForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  try {
-    const d = await CM.api('/api/auth/register', { method: 'POST', body: {
-      name: document.getElementById('rName').value,
-      email: document.getElementById('rEmail').value,
-      password: document.getElementById('rPass').value,
-      ward: document.getElementById('rWard').value || null,
-    }});
-    CM.setSession(d.token, d.user);
-    CM.toast('Account created', 'ok');
-    setTimeout(() => location.href = d.home, 400);
-  } catch (err) { CM.toast(err.message, 'err'); }
+  const body = { name: $('rName').value.trim(), email: $('rEmail').value.trim(),
+                 password: $('rPass').value, ward: $('rWard').value || null };
+  showError($('registerError'), '');
+  if (body.name.length < 2) return showError($('registerError'), 'Please enter your name.');
+  if (!/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/.test(body.email)) return showError($('registerError'), 'Enter a valid email address.');
+  if (body.password.length < 8) return showError($('registerError'), 'Password must be at least 8 characters.');
+  await CM.busy($('registerBtn'), 'Creating account…', async () => {
+    try {
+      const d = await CM.api('/api/auth/register', { method: 'POST', body });
+      CM.setSession(d.token, d.user);
+      location.href = safeHome(d.home);
+    } catch (err) { showError($('registerError'), err.message); }
+  });
 });
 
 (async () => {
-  // Live stats (all from the API — nothing hardcoded in the page)
+  if (new URLSearchParams(location.search).get('expired')) $('expiredNote').hidden = false;
+
   try {
     const h = await CM.api('/api/health');
-    document.getElementById('sComplaints').textContent = CM.num(h.complaints);
-    document.getElementById('sIncidents').textContent = CM.num(h.incidents);
-    document.getElementById('sAI').textContent = h.ai_enabled ? 'Sarvam AI' : 'Rules';
-  } catch {}
+    $('sComplaints').textContent = CM.num(h.complaints);
+    $('sIncidents').textContent = CM.num(h.incidents);
+    $('sAssets').textContent = CM.num(h.assets);
+    $('sAI').textContent = h.ai_enabled ? 'Sarvam AI + rules' : 'Rule-based';
+    $('demoNote').hidden = !h.demo_database;
+  } catch { /* stats are decorative; the form still works */ }
+
   try {
     const c = await CM.api('/api/config');
-    document.getElementById('sCats').textContent = c.categories.length;
-  } catch {}
+    (c.wards || []).forEach(w => { const o = document.createElement('option'); o.value = w.ward; o.textContent = w.ward; $('rWard').appendChild(o); });
+  } catch { /* optional field */ }
 
-  // Demo credentials — rendered only if enabled in the config file.
-  // Clicking a chip FILLS the form (it does not auto-submit).
   try {
-    const d = await CM.api('/api/demo-credentials');
+    const d = await CM.api('/api/demo-info');
     if (d.enabled && d.accounts.length) {
-      const box = document.getElementById('demoBox');
-      const fill = document.getElementById('demoFill');
-      box.style.display = 'block';
+      $('demoBox').hidden = false;
       d.accounts.forEach(a => {
-        const chip = document.createElement('span');
-        chip.className = 'chip';
-        chip.textContent = a.role.charAt(0).toUpperCase() + a.role.slice(1);
-        chip.title = `Fill ${a.email}`;
-        chip.onclick = () => {
-          document.getElementById('email').value = a.email;
-          document.getElementById('password').value = a.password;
-          CM.toast(`${a.role} credentials filled — press Sign in`, 'ok');
-        };
-        fill.appendChild(chip);
+        const chip = document.createElement('button');
+        chip.type = 'button'; chip.className = 'chip';
+        chip.textContent = `${CM.titleCase(a.role)} · ${a.email}`;
+        chip.addEventListener('click', () => { setTab(false); $('email').value = a.email; $('password').focus(); });
+        $('demoFill').appendChild(chip);
       });
     }
-  } catch {}
+  } catch { /* demo info is optional */ }
 
-  // If a VALID session already exists, go straight to the right dashboard.
-  // We verify the token with the server first so a stale/expired session
-  // can never bounce the user in a redirect loop.
+  // An existing VALID session goes straight to its dashboard.
   const u = CM.getUser();
   if (u && CM.getToken()) {
-    try {
-      await CM.api('/api/auth/me');
-      location.href = CM.homeFor(u.role);
-    } catch { CM.clearSession(); }
+    try { await CM.api('/api/auth/me'); location.href = CM.homeFor(u.role); }
+    catch { CM.clearSession(); }
   }
 })();

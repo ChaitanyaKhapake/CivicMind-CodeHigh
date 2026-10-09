@@ -1,17 +1,23 @@
-# CivicMind — example systemd unit for a VPS deployment.
+# CivicMind — example systemd unit for a VPS deployment behind Nginx (HTTPS).
 # Copy to /etc/systemd/system/civicmind.service and adjust paths/user.
+# Put secrets in /etc/civicmind.env (chmod 600), NOT in this file:
+#   CIVICMIND_SECRET=<long random string>
+#   SARVAM_API_KEY=<optional>
+#   CIVICMIND_DB=/var/lib/civicmind/civicmind.db
+#   CIVICMIND_EVIDENCE_DIR=/var/lib/civicmind/evidence
 [Unit]
 Description=CivicMind (FastAPI)
 After=network.target
 
 [Service]
-User=www-data
+User=civicmind
 WorkingDirectory=/opt/civicmind/backend
-Environment="SARVAM_API_KEY=sk_replace_me"
-Environment="CIVICMIND_SECRET=replace_with_long_random_string"
-ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8000
+EnvironmentFile=/etc/civicmind.env
+ExecStart=/usr/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8000 --proxy-headers
 Restart=always
 RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
 
 [Install]
 WantedBy=multi-user.target

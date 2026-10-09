@@ -1,87 +1,106 @@
 /* ============================================================
-   CivicMind — shared shell: navbar, live notification bell.
+   CivicMind — shared shell: navbar, notification bell.
    ============================================================ */
 const NAV_LINKS = {
-  citizen: [['citizen.html','Report & Track'], ['map.html','Live Map']],
-  officer: [['dashboard.html','Dashboard'], ['map.html','Live Map']],
-  admin:   [['admin.html','Admin'], ['dashboard.html','Dashboard'], ['map.html','Live Map']],
+  citizen: [['citizen.html', 'Report & track'], ['map.html', 'My map']],
+  officer: [['dashboard.html', 'Operations'], ['map.html', 'City map'], ['assets.html', 'Infrastructure']],
+  admin:   [['admin.html', 'Admin'], ['dashboard.html', 'Operations'], ['map.html', 'City map'], ['assets.html', 'Infrastructure']],
 };
 
 function renderNav(active, user) {
-  const links = (NAV_LINKS[user.role] || []).map(([href, label]) => {
-    const cls = (href === active) ? 'active' : '';
-    return `<a class="${cls}" href="${href}">${label}</a>`;
-  }).join('');
-  const initials = (user.name || '?').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
-  const html = `
+  const nav = document.getElementById('nav');
+  if (!nav) return;
+  const links = (NAV_LINKS[user.role] || []).map(([href, label]) =>
+    `<a class="${href === active ? 'active' : ''}" href="${href}"${href === active ? ' aria-current="page"' : ''}>${CM.esc(label)}</a>`).join('');
+  const initials = (user.name || '?').split(/\s+/).map(w => w[0] || '').slice(0, 2).join('').toUpperCase();
+  nav.innerHTML = `
     <div class="wrap nav-inner">
       <a class="brand" href="${CM.homeFor(user.role)}">
-        <img src="assets/logo.svg" alt="CivicMind"/> Civic<span style="color:var(--orange)">Mind</span>
+        <img src="assets/logo.svg" alt=""/> Civic<span class="brand-accent">Mind</span>
       </a>
-      <nav class="nav-links">${links}</nav>
+      <button class="btn ghost sm nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks">☰ Menu</button>
+      <nav class="nav-links" id="navLinks">${links}</nav>
       <div class="nav-right">
-        <button class="btn ghost bell" id="bellBtn" title="Notifications" onclick="openBell()">
-          🔔<span class="dot" id="bellDot" style="display:none">0</span>
+        <button class="btn ghost bell" id="bellBtn" aria-label="Notifications">
+          🔔<span class="dot" id="bellDot" hidden>0</span>
         </button>
         <div class="user-chip">
-          <div class="avatar">${initials}</div>
-          <div style="line-height:1.15">
-            <div style="font-weight:700;font-size:.82rem">${CM.esc(user.name)}</div>
-            <div class="tiny muted" style="text-transform:capitalize">${user.role}</div>
+          <div class="avatar" aria-hidden="true">${CM.esc(initials)}</div>
+          <div class="user-meta">
+            <div class="user-name">${CM.esc(user.name)}</div>
+            <div class="tiny muted">${CM.esc(CM.titleCase(user.role))}</div>
           </div>
         </div>
-        <button class="btn sm ghost" onclick="CM.logout()">Logout</button>
+        <button class="btn sm ghost" id="logoutBtn">Sign out</button>
       </div>
     </div>`;
-  const nav = document.getElementById('nav');
-  if (nav) nav.innerHTML = html;
-  startBell(user);
+  document.getElementById('logoutBtn').addEventListener('click', CM.logout);
+  document.getElementById('bellBtn').addEventListener('click', toggleBell);
+  const toggle = document.getElementById('navToggle');
+  toggle.addEventListener('click', () => {
+    const open = nav.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', String(open));
+  });
+  refreshBell();
+  setInterval(() => { if (!document.hidden) refreshBell(); }, 20000);
 }
 
 /* ---------- notifications bell ---------- */
-let _bellTimer = null;
+const NOTE_ICON = { incident: '⚠️', resolved: '✅', approved: '👍', in_progress: '🔧', info: '📩' };
+
 async function refreshBell() {
   try {
     const d = await CM.api('/api/notifications?unread=1');
     const dot = document.getElementById('bellDot');
-    if (dot) { dot.style.display = d.unread ? 'grid' : 'none'; dot.textContent = d.unread > 9 ? '9+' : d.unread; }
-  } catch (e) { /* silent */ }
+    if (dot) { dot.hidden = !d.unread; dot.textContent = d.unread > 9 ? '9+' : String(d.unread); }
+  } catch { /* the page shows its own errors */ }
 }
-function startBell(user) { refreshBell(); _bellTimer = setInterval(refreshBell, 15000); }
 
-async function openBell() {
-  try {
-    const d = await CM.api('/api/notifications');
-    let panel = document.getElementById('bellPanel');
-    if (panel) { panel.remove(); return; }
-    panel = document.createElement('div');
-    panel.id = 'bellPanel';
-    panel.className = 'card';
-    panel.style.cssText = 'position:fixed;top:74px;right:22px;width:360px;max-height:70vh;overflow:auto;z-index:120;box-shadow:var(--shadow-lg)';
-    const items = d.items.length ? d.items.map(n => `
-      <div class="list-item" style="cursor:default">
-        <div class="li-icon">${({incident:'⚠️',resolved:'✅',approved:'👍',in_progress:'🔧',info:'📩'})[n.type]||'📩'}</div>
-        <div class="grow">
-          <div style="font-weight:700;font-size:.86rem">${CM.esc(n.title)}</div>
-          <div class="small muted">${CM.esc(n.message||'')}</div>
-          <div class="tiny muted" style="margin-top:4px">${CM.timeAgo(n.created_at)}</div>
-        </div>
-      </div>`).join('') : '<div class="empty">No notifications yet.</div>';
-    panel.innerHTML = `<div class="card-h"><h3>Notifications</h3>
-        <button class="btn sm ghost" onclick="markAllRead()">Mark all read</button></div>
-        <div class="list">${items}</div>`;
-    document.body.appendChild(panel);
-    setTimeout(() => document.addEventListener('click', _closeBellOnce), 50);
-  } catch (e) { CM.toast(e.message, 'err'); }
+function noteItem(n) {
+  const item = document.createElement('div');
+  item.className = 'list-item static';
+  const icon = document.createElement('div');
+  icon.className = 'li-icon'; icon.textContent = NOTE_ICON[n.type] || '📩';
+  const body = document.createElement('div');
+  body.className = 'grow';
+  const t = document.createElement('div'); t.className = 'li-title'; t.textContent = n.title;
+  const m = document.createElement('div'); m.className = 'small muted'; m.textContent = n.message || '';
+  const w = document.createElement('div'); w.className = 'tiny muted'; w.textContent = CM.timeAgo(n.created_at);
+  body.append(t, m, w);
+  item.append(icon, body);
+  return item;
 }
-function _closeBellOnce(ev) {
+
+async function toggleBell() {
+  const existing = document.getElementById('bellPanel');
+  if (existing) { existing.remove(); return; }
+  let d;
+  try { d = await CM.api('/api/notifications'); } catch (e) { return CM.fail(e); }
+  const panel = document.createElement('div');
+  panel.id = 'bellPanel';
+  panel.className = 'card bell-panel';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-label', 'Notifications');
+  panel.innerHTML = '<div class="card-h"><h3>Notifications</h3><button class="btn sm ghost" id="markRead">Mark all read</button></div>';
+  const list = document.createElement('div');
+  list.className = 'list';
+  if (d.items.length) d.items.forEach(n => list.appendChild(noteItem(n)));
+  else list.innerHTML = '<div class="empty">No notifications yet.</div>';
+  panel.appendChild(list);
+  document.body.appendChild(panel);
+  document.getElementById('markRead').addEventListener('click', async () => {
+    try { await CM.api('/api/notifications/read', { method: 'POST' }); CM.toast('All marked as read', 'ok'); refreshBell(); panel.remove(); }
+    catch (e) { CM.fail(e); }
+  });
+  setTimeout(() => document.addEventListener('click', closeBellOnce), 50);
+}
+function closeBellOnce(ev) {
   const p = document.getElementById('bellPanel');
-  if (p && !p.contains(ev.target) && ev.target.id !== 'bellBtn' && !ev.target.closest('#bellBtn')) {
-    p.remove(); document.removeEventListener('click', _closeBellOnce);
-  }
+  if (p && !p.contains(ev.target) && !ev.target.closest('#bellBtn')) {
+    p.remove(); document.removeEventListener('click', closeBellOnce);
+  } else if (!p) document.removeEventListener('click', closeBellOnce);
 }
-async function markAllRead() {
-  await CM.api('/api/notifications/read', { method: 'POST' });
-  CM.toast('All marked as read', 'ok'); refreshBell();
-  const p = document.getElementById('bellPanel'); if (p) p.remove();
-}
+
+/* ---------- small shared renderers ---------- */
+function emptyState(text) { return `<div class="empty">${CM.esc(text)}</div>`; }
+function syntheticTag(flag) { return flag ? '<span class="badge synthetic" title="Fictional demo record">Synthetic</span>' : ''; }

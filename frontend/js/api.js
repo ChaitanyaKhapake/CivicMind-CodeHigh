@@ -1,102 +1,189 @@
 /* ============================================================
    CivicMind — shared client library
-   API wrapper, auth/session, toasts and formatting helpers.
+   API wrapper, session, toasts, safe rendering and formatting helpers.
+
+   SAFETY RULE for every page: any value that came from the server or the
+   user is inserted with CM.esc() (text / quoted attributes) or textContent.
+   Never put such values inside inline event handlers — use data-* attributes
+   and addEventListener instead.
    ============================================================ */
 const CM = (() => {
   const TOKEN_KEY = 'cm_token';
   const USER_KEY  = 'cm_user';
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch { /* private mode */ } },
+    del(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } },
+  };
 
-  const getToken = () => localStorage.getItem(TOKEN_KEY);
-  const getUser  = () => { try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; } };
-  const setSession = (token, user) => { localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(USER_KEY, JSON.stringify(user)); };
-  const clearSession = () => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); };
+  const getToken = () => store.get(TOKEN_KEY);
+  const getUser  = () => { try { return JSON.parse(store.get(USER_KEY)); } catch { return null; } };
+  const setSession = (token, user) => { store.set(TOKEN_KEY, token); store.set(USER_KEY, JSON.stringify(user)); };
+  const clearSession = () => { store.del(TOKEN_KEY); store.del(USER_KEY); };
 
-  async function api(path, { method = 'GET', body, raw = false } = {}) {
+  function expire() {
+    clearSession();
+    if (!/index\.html$|\/$/.test(location.pathname)) location.href = 'index.html?expired=1';
+  }
+
+  function messageFrom(data, status) {
+    const d = data && data.detail;
+    if (typeof d === 'string') return d;
+    if (d && typeof d.message === 'string') return d.message;
+    if (status === 413) return 'That upload is too large.';
+    if (status === 429) return 'Too many attempts. Please wait and try again.';
+    if (status >= 500) return 'The server had a problem. Please try again.';
+    return 'Request failed (' + status + ').';
+  }
+
+  async function api(path, { method = 'GET', body } = {}) {
     const headers = {};
     const token = getToken();
     if (token) headers['Authorization'] = 'Bearer ' + token;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
-    const url = path.startsWith('http') ? path : path.replace(/^\/+/, '');
-    const res = await fetch(url, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+    let res;
+    try {
+      res = await fetch(path.replace(/^\/+/, ''), { method, headers,
+        body: body !== undefined ? JSON.stringify(body) : undefined });
+    } catch {
+      const err = new Error('Network error — check your connection and try again.');
+      err.status = 0; throw err;
+    }
     const text = await res.text();
     let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    try { data = text ? JSON.parse(text) : null; } catch { data = null; }
     if (!res.ok) {
-      let msg = 'Request failed';
-      if (data && data.detail !== undefined) {
-        if (typeof data.detail === 'string') msg = data.detail;
-        else if (data.detail && data.detail.message) msg = data.detail.message;
-        else msg = JSON.stringify(data.detail);
-      } else if (typeof data === 'string') msg = data;
-      if (res.status === 401 && !path.includes('/auth/login')) { clearSession(); location.href = 'index.html'; }
-      const err = new Error(msg);
+      if (res.status === 401 && token && !path.includes('/auth/')) expire();
+      const err = new Error(messageFrom(data, res.status));
       err.status = res.status;
       err.detail = (data && data.detail) || null;
+      err.reasons = (err.detail && Array.isArray(err.detail.reasons)) ? err.detail.reasons : [];
       throw err;
     }
     return data;
   }
 
+  /** Load a protected image (evidence is never public) into an <img>. */
+  async function authImage(img, url) {
+    try {
+      const res = await fetch(url.replace(/^\/+/, ''), { headers: { Authorization: 'Bearer ' + (getToken() || '') } });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      img.src = URL.createObjectURL(blob);
+      img.classList.remove('img-missing');
+    } catch {
+      img.alt = 'Photo unavailable'; img.classList.add('img-missing');
+    }
+  }
+  /** Hydrate every <img data-auth-src="..."> under root. */
+  function hydrateImages(root = document) {
+    root.querySelectorAll('img[data-auth-src]').forEach(img => {
+      const u = img.getAttribute('data-auth-src'); img.removeAttribute('data-auth-src'); authImage(img, u);
+    });
+  }
+
   /* ---------- toast ---------- */
-  function toast(msg, type = '') {
+  function toast(msg, type = '', reasons) {
     let box = document.getElementById('toasts');
-    if (!box) { box = document.createElement('div'); box.id = 'toasts'; document.body.appendChild(box); }
+    if (!box) { box = document.createElement('div'); box.id = 'toasts'; box.setAttribute('role', 'status'); document.body.appendChild(box); }
     const el = document.createElement('div');
     el.className = 'toast ' + type;
     el.textContent = msg;
+    if (reasons && reasons.length) {
+      const ul = document.createElement('ul');
+      reasons.slice(0, 4).forEach(r => { const li = document.createElement('li'); li.textContent = r; ul.appendChild(li); });
+      el.appendChild(ul);
+    }
     box.appendChild(el);
-    setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(20px)'; el.style.transition = '.3s'; }, 3200);
-    setTimeout(() => el.remove(), 3600);
+    const ttl = type === 'err' ? 6000 : 3600;
+    setTimeout(() => { el.style.opacity = '0'; el.style.transition = '.3s'; }, ttl);
+    setTimeout(() => el.remove(), ttl + 400);
+  }
+  const fail = (e) => toast(e.message, 'err', e.reasons);
+
+  /* ---------- busy buttons ---------- */
+  async function busy(btn, label, fn) {
+    if (!btn || btn.disabled) return;
+    const original = btn.innerHTML;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> ' + esc(label);
+    try { return await fn(); }
+    finally { btn.disabled = false; btn.innerHTML = original; }
   }
 
   /* ---------- auth guards ---------- */
+  const homeFor = (role) => ({ citizen: 'citizen.html', officer: 'dashboard.html', admin: 'admin.html' }[role] || 'index.html');
   function requireAuth(roles) {
     const u = getUser();
     if (!u || !getToken()) { location.href = 'index.html'; return null; }
     if (roles && roles.length && !roles.includes(u.role)) { location.href = homeFor(u.role); return null; }
     return u;
   }
-  const homeFor = (role) => ({ citizen: 'citizen.html', officer: 'dashboard.html', admin: 'admin.html' }[role] || 'index.html');
-
   async function logout() { clearSession(); location.href = 'index.html'; }
 
+  /* ---------- files ---------- */
+  const MAX_UPLOAD = 5 * 1024 * 1024;
+  function fileToDataURL(file) {
+    return new Promise((resolve, reject) => {
+      if (!file) return reject(new Error('No file selected.'));
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return reject(new Error('Use a JPEG, PNG or WebP photo.'));
+      if (file.size > MAX_UPLOAD) return reject(new Error('Photo is larger than 5 MB.'));
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => reject(new Error('Could not read the file.'));
+      r.readAsDataURL(file);
+    });
+  }
+
   /* ---------- formatting ---------- */
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const esc = (s) => String(s ?? '').replace(/[&<>"'`]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;' }[c]));
   const pClass = (label) => ({ Critical:'critical', High:'high', Medium:'medium', Low:'low' }[label] || '');
-  const sClass = (s) => ({ active:'active', resolved:'resolved', in_progress:'in_progress', reopened:'reopened', pending:'pending', approved:'approved', completed:'completed', clustered:'active', submitted:'pending' }[s] || '');
+  const sevClass = (s) => ({ critical:'critical', high:'high', medium:'medium', low:'low' }[s] || '');
+  const sClass = (s) => ({ active:'active', resolved:'resolved', in_progress:'in_progress', reopened:'reopened',
+    pending:'pending', approved:'approved', completed:'completed', clustered:'active', submitted:'pending',
+    rejected:'reopened', cancelled:'pending', open:'reopened', acknowledged:'approved', dismissed:'pending', cleared:'resolved' }[s] || '');
+  const STATUS_TEXT = { submitted: 'Submitted', clustered: 'Grouped into incident', in_progress: 'In progress',
+    resolved: 'Resolved', rejected: 'Rejected', active: 'Awaiting plan approval', reopened: 'Reopened',
+    pending: 'Awaiting approval', approved: 'Approved', completed: 'Completed', cancelled: 'Cancelled',
+    open: 'Open', acknowledged: 'Acknowledged', dismissed: 'Dismissed', cleared: 'Cleared' };
+  const statusText = (s) => STATUS_TEXT[s] || titleCase(s);
   const titleCase = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   const num = (n) => (n === null || n === undefined) ? '—' : Number(n).toLocaleString('en-IN');
+  const engineLabel = (e) => e === 'sarvam' ? 'AI-assisted (Sarvam)' : 'Rule-based';
+  const checkLabel = (v) => ({ passed: 'Passed automated checks', needs_review: 'Needs review', rejected: 'Rejected' }[v] || '—');
 
+  function parseTs(ts) {
+    if (!ts) return null;
+    const s = String(ts).replace(' ', 'T');
+    const d = new Date(/Z|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z');
+    return isNaN(d) ? null : d;
+  }
   function timeAgo(ts) {
-    if (!ts) return '';
-    const d = new Date(ts.replace(' ', 'T') + (ts.endsWith('Z') ? '' : 'Z'));
+    const d = parseTs(ts); if (!d) return '';
     const s = (Date.now() - d.getTime()) / 1000;
-    if (isNaN(s)) return ts;
     if (s < 60) return 'just now';
     if (s < 3600) return Math.floor(s / 60) + 'm ago';
     if (s < 86400) return Math.floor(s / 3600) + 'h ago';
     if (s < 604800) return Math.floor(s / 86400) + 'd ago';
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
   }
   function fmtDate(ts) {
-    if (!ts) return '—';
-    const d = new Date(ts.replace(' ', 'T') + (ts.endsWith('Z') ? '' : 'Z'));
-    return isNaN(d) ? ts : d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    const d = parseTs(ts); if (!d) return '—';
+    return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
+  const fmtDay = (ts) => { const d = parseTs(ts); return d ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
 
-  return { api, getToken, getUser, setSession, clearSession, toast, requireAuth, homeFor, logout,
-           esc, pClass, sClass, titleCase, num, timeAgo, fmtDate };
+  return { api, getToken, getUser, setSession, clearSession, toast, fail, busy, requireAuth, homeFor, logout,
+           authImage, hydrateImages, fileToDataURL, esc, pClass, sevClass, sClass, statusText, titleCase, num,
+           engineLabel, checkLabel, timeAgo, fmtDate, fmtDay, parseTs };
 })();
 
 /* ---- friendly notice if the HTML is opened directly (file://) ---- */
 if (location.protocol === 'file:') {
   document.addEventListener('DOMContentLoaded', () => {
     const b = document.createElement('div');
-    b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#D9342B;color:#fff;' +
-      'padding:12px 16px;font:600 14px/1.4 system-ui,sans-serif;text-align:center';
-    b.innerHTML = 'CivicMind is a client&ndash;server app and must be opened through its server. ' +
-      'Run <b>python -m uvicorn main:app --port 8000</b> inside the backend folder, ' +
-      'then visit <b>http://localhost:8000</b>.';
-    document.body.appendChild(b);
+    b.className = 'file-banner';
+    b.textContent = 'CivicMind must be opened through its server. Run "python -m uvicorn main:app --port 8000" ' +
+      'inside the backend folder, then visit http://localhost:8000.';
+    document.body.prepend(b);
   });
 }

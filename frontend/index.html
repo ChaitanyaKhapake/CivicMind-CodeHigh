@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>CivicMind — From complaints to incidents</title>
+<title>CivicMind — civic complaint intelligence</title>
+<meta name="description" content="CivicMind links citizen complaints to the infrastructure behind them, prioritises the work and tracks it to a verified, accountable outcome."/>
 <link rel="icon" href="assets/favicon.svg"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
@@ -13,11 +14,9 @@
 
 <header class="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="index.html">
-      <img src="assets/logo.svg" alt="CivicMind"/> Civic<span style="color:var(--orange)">Mind</span>
-    </a>
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""/> Civic<span class="brand-accent">Mind</span></a>
     <div class="nav-right">
-      <span class="badge" style="background:var(--orange-050);color:var(--orange-600)">Build with भारत 4.0</span>
+      <span class="badge brand-badge">Build with भारत 4.0 · prototype</span>
       <a class="btn sm" href="#login">Sign in</a>
     </div>
   </div>
@@ -26,113 +25,109 @@
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <div class="eyebrow">AI-powered civic incident intelligence</div>
-      <h1>The city sees complaints.<br/>CivicMind finds the <span class="hl">incident</span>.</h1>
-      <p class="lede">Scattered citizen reports are fused into one explainable civic incident — then investigated, prioritised, acted on and <strong>verified resolved</strong>. Not a ticket system. An incident intelligence platform.</p>
+      <div class="eyebrow">Civic complaint intelligence for municipal teams</div>
+      <h1>Every complaint is a clue.<br/>CivicMind finds the <span class="hl">underlying problem</span>.</h1>
+      <p class="lede">Citizens report issues. CivicMind groups related reports into incidents, links them to the
+        streetlight, road or drain behind them, flags infrastructure risks, ranks the work with a transparent score,
+        and tracks each response to a proof-backed, accountable outcome.</p>
       <div class="row wrap-row" style="margin-top:20px">
-        <a class="btn primary" href="#login">Report an issue →</a>
-        <a class="btn" href="map.html">View live city map</a>
+        <a class="btn primary" href="#login" id="ctaReport">Report a civic issue →</a>
+        <a class="btn" href="#how">See how it works</a>
       </div>
-      <div class="stat-strip" style="margin-top:30px">
-        <div class="s"><div class="n" id="sComplaints">0</div><div class="l">Citizen reports</div></div>
-        <div class="s"><div class="n" id="sIncidents">0</div><div class="l">Fused incidents</div></div>
-        <div class="s"><div class="n" id="sCats">—</div><div class="l">Civic categories</div></div>
-        <div class="s"><div class="n" id="sAI">—</div><div class="l">AI engine</div></div>
+      <div class="stat-strip" style="margin-top:30px" aria-live="polite">
+        <div class="s"><div class="n" id="sComplaints">—</div><div class="l">Citizen reports</div></div>
+        <div class="s"><div class="n" id="sIncidents">—</div><div class="l">Incidents</div></div>
+        <div class="s"><div class="n" id="sAssets">—</div><div class="l">Mapped assets</div></div>
+        <div class="s"><div class="n" id="sAI">—</div><div class="l">Classification engine</div></div>
       </div>
+      <p class="tiny muted" id="demoNote" hidden style="margin-top:10px">⚠️ Demo database: all records shown are fictional and marked synthetic.</p>
     </div>
 
     <div class="auth-card" id="login">
-      <h3 id="authTitle">Sign in</h3>
-      <p class="small muted" id="authSub">Citizens report civic issues. Officers and admins sign in with their own credentials.</p>
-
-      <form id="loginForm" autocomplete="off">
-        <div class="field">
-          <label class="f">Email</label>
-          <input type="email" id="email" placeholder="you@example.com" required/>
-        </div>
-        <div class="field">
-          <label class="f">Password</label>
-          <input type="password" id="password" placeholder="••••••••" required/>
-        </div>
-        <button class="btn primary block" id="loginBtn" type="submit">Sign in</button>
-      </form>
-
-      <div class="divider"></div>
-      <div class="small center muted">
-        New here? <a href="#" id="showRegister" style="color:var(--orange);font-weight:700">Create a citizen account</a>
+      <div class="notice warn" id="expiredNote" hidden>Your session expired. Please sign in again.</div>
+      <div class="tabs" role="tablist">
+        <button type="button" class="active" id="tabLogin" role="tab" aria-selected="true">Sign in</button>
+        <button type="button" id="tabRegister" role="tab" aria-selected="false">Create citizen account</button>
       </div>
-      <form id="registerForm" style="display:none">
-        <div class="field"><label class="f">Full name</label><input id="rName" required/></div>
-        <div class="field"><label class="f">Email</label><input type="email" id="rEmail" required/></div>
-        <div class="field"><label class="f">Password</label><input type="password" id="rPass" required/></div>
-        <div class="field"><label class="f">Ward / area (optional)</label><input id="rWard" placeholder="e.g. Kothrud"/></div>
-        <button class="btn primary block" type="submit">Create account</button>
+
+      <form id="loginForm" novalidate>
+        <div class="field"><label class="f" for="email">Email</label>
+          <input type="email" id="email" autocomplete="username" required maxlength="254"/></div>
+        <div class="field"><label class="f" for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password" required maxlength="256"/></div>
+        <div class="form-error" id="loginError" role="alert" hidden></div>
+        <button class="btn primary block" id="loginBtn" type="submit">Sign in</button>
+        <p class="hint center" style="margin-top:10px">Officers and admins sign in here too — accounts are created by an administrator.</p>
       </form>
 
-      <div id="demoBox" style="display:none">
+      <form id="registerForm" novalidate hidden>
+        <div class="field"><label class="f" for="rName">Full name</label><input id="rName" autocomplete="name" required maxlength="80"/></div>
+        <div class="field"><label class="f" for="rEmail">Email</label><input type="email" id="rEmail" autocomplete="email" required maxlength="254"/></div>
+        <div class="field"><label class="f" for="rPass">Password</label>
+          <input type="password" id="rPass" autocomplete="new-password" required minlength="8" maxlength="256"/>
+          <div class="hint">At least 8 characters.</div></div>
+        <div class="field"><label class="f" for="rWard">Ward (optional)</label><select id="rWard"><option value="">— Not specified —</option></select></div>
+        <div class="form-error" id="registerError" role="alert" hidden></div>
+        <button class="btn primary block" id="registerBtn" type="submit">Create account</button>
+      </form>
+
+      <div id="demoBox" hidden>
         <div class="divider"></div>
-        <div class="tiny muted" style="margin-bottom:8px">Demo accounts — click to fill the form:</div>
+        <div class="tiny muted" style="margin-bottom:8px">Demo accounts (fictional). Click to fill the email — the password is in <code>data/demo/demo_credentials.txt</code> on the presenter's machine.</div>
         <div class="pill-list" id="demoFill"></div>
       </div>
     </div>
   </div>
 </section>
 
-<main class="wrap page">
-  <div class="center" style="max-width:720px;margin:10px auto 34px">
-    <div class="eyebrow">Detect → Investigate → Prioritize → Act → Verify</div>
-    <h2>One workflow from report to proof</h2>
-    <p class="muted">CivicMind does not just manage complaints; it discovers the real incidents hiding behind them.</p>
+<main class="wrap page" id="how">
+  <div class="center section-intro">
+    <div class="eyebrow">Report → Group → Link → Prioritise → Act → Verify</div>
+    <h2>One accountable path from a citizen's report to a resolved problem</h2>
+    <p class="muted">Each step is recorded with who did it and when. Officers stay in control: AI only suggests.</p>
   </div>
 
-  <div class="steps" style="margin-bottom:40px">
-    <div class="step-card"><div class="n">1</div><div class="t">Detect</div><div class="d">Fuse related reports</div></div>
-    <div class="step-card"><div class="n">2</div><div class="t">Investigate</div><div class="d">Explain the evidence</div></div>
-    <div class="step-card"><div class="n">3</div><div class="t">Prioritize</div><div class="d">Score urgency & impact</div></div>
-    <div class="step-card"><div class="n">4</div><div class="t">Act</div><div class="d">Approve the response</div></div>
-    <div class="step-card"><div class="n">5</div><div class="t">Verify</div><div class="d">Prove it improved</div></div>
-  </div>
+  <ol class="steps">
+    <li class="step-card"><div class="n">1</div><div class="t">Report</div><div class="d">Citizen pins the location, describes it, optionally adds a photo</div></li>
+    <li class="step-card"><div class="n">2</div><div class="t">Group</div><div class="d">Nearby related reports become one incident</div></li>
+    <li class="step-card"><div class="n">3</div><div class="t">Link</div><div class="d">Matched to a compatible asset within 150 m</div></li>
+    <li class="step-card"><div class="n">4</div><div class="t">Prioritise</div><div class="d">Bounded 0–100 score with visible factors</div></li>
+    <li class="step-card"><div class="n">5</div><div class="t">Act</div><div class="d">Officer approves, edits or rejects the plan</div></li>
+    <li class="step-card"><div class="n">6</div><div class="t">Verify</div><div class="d">Proof photo + recurrence check before closing</div></li>
+  </ol>
 
   <div class="grid g3">
-    <div class="feature-card">
-      <div class="fi" style="background:var(--orange-050)">🧩</div>
-      <h3>Incident Fusion</h3>
-      <p class="small muted">Combines multiple weak signals — location, time and category — into one explainable incident.</p>
-    </div>
-    <div class="feature-card">
-      <div class="fi" style="background:var(--blue-050)">🔎</div>
-      <h3>AI Investigation</h3>
-      <p class="small muted">Sarvam AI explains why reports are linked, the probable cause and what an officer should check next.</p>
-    </div>
-    <div class="feature-card">
-      <div class="fi" style="background:var(--purple-050)">📊</div>
-      <h3>Priority Engine</h3>
-      <p class="small muted">Severity, affected population, spread and duration combine into a transparent priority score.</p>
-    </div>
-    <div class="feature-card">
-      <div class="fi" style="background:var(--green-050)">✅</div>
-      <h3>Resolution Verification</h3>
-      <p class="small muted">Before-and-after signals confirm whether the real-world problem was actually solved.</p>
-    </div>
-    <div class="feature-card">
-      <div class="fi" style="background:var(--orange-050)">🗺️</div>
-      <h3>Smart City Map</h3>
-      <p class="small muted">Complaint markers, incident clusters, severity and affected-area visualisation on one live map.</p>
-    </div>
-    <div class="feature-card">
-      <div class="fi" style="background:var(--blue-050)">⚡</div>
-      <h3>Real-time Tracking</h3>
-      <p class="small muted">Citizens watch their report move from submitted to resolved, live, on their own dashboard.</p>
-    </div>
+    <div class="feature-card"><div class="fi fi-orange" aria-hidden="true">🧩</div><h3>Incident grouping</h3>
+      <p class="small muted">Reports of the same or closely related category within 1.5 km and 48 h are grouped. A pothole is never merged with a streetlight just because it's nearby.</p></div>
+    <div class="feature-card"><div class="fi fi-blue" aria-hidden="true">🏗️</div><h3>Infrastructure intelligence</h3>
+      <p class="small muted">Complaints are linked to the specific streetlight, road segment or drain they concern, building a maintenance and complaint history per asset.</p></div>
+    <div class="feature-card"><div class="fi fi-red" aria-hidden="true">🚩</div><h3>Risk findings</h3>
+      <p class="small muted">Rules flag repeated complaints on one asset, recurrence after a repair, critical assets, overdue inspections and conflicting work orders — each with its evidence.</p></div>
+    <div class="feature-card"><div class="fi fi-purple" aria-hidden="true">📊</div><h3>Explainable priority</h3>
+      <p class="small muted">Severity, report count, time unresolved, category safety weight and asset criticality add up to a score officers can read and challenge.</p></div>
+    <div class="feature-card"><div class="fi fi-green" aria-hidden="true">✅</div><h3>Accountable resolution</h3>
+      <p class="small muted">Work can only close with an approved plan and a proof photo that passes automated checks. The officer's name is recorded and citizens are notified.</p></div>
+    <div class="feature-card"><div class="fi fi-orange" aria-hidden="true">🔒</div><h3>Privacy by design</h3>
+      <p class="small muted">Citizens see only their own reports. Photos are private. Public tracking needs a private code and reveals only status.</p></div>
   </div>
 
-  <div class="card" style="margin-top:34px;background:linear-gradient(120deg,var(--orange-050),var(--surface));border-color:var(--orange-100)">
+  <div class="card honesty">
+    <h3>What this prototype does — and doesn't — claim</h3>
+    <ul class="small">
+      <li>Classification and plan drafting use Sarvam AI when configured, otherwise a transparent rule-based engine. Every result shows which one ran.</li>
+      <li>Photo checks detect invalid, blank, tiny or re-used images. They are <strong>not</strong> an independent field inspection.</li>
+      <li>Ward assignment uses the nearest configured ward centre, not official ward boundaries.</li>
+      <li>It is not connected to any municipal system. Demo data is fictional and labelled as synthetic.</li>
+    </ul>
+  </div>
+
+  <div class="card team-card">
     <div class="row spread wrap-row">
       <div>
         <h3 style="margin-bottom:4px">Team CodeHigh · MIT ADT Pune</h3>
-        <p class="small muted" style="margin:0">Spparsh Mansuke &nbsp;·&nbsp; Chaitanya Khapake &nbsp;—&nbsp; Problem statement: Sustainability & Social Impact.</p>
+        <p class="small muted" style="margin:0">Spparsh Mansuke · Chaitanya Khapake — Sustainability &amp; Social Impact</p>
       </div>
-      <span class="badge" style="background:var(--surface);color:var(--ink-2)">Prototype · live municipal demo</span>
+      <span class="badge">Hackathon prototype</span>
     </div>
   </div>
 </main>
