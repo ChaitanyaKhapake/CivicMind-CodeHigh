@@ -1,59 +1,60 @@
 """
-CivicMind — first-run bootstrap.
+CivicMind — startup bootstrap.
 
-The platform ships EMPTY: no synthetic complaints or incidents. On startup we
-only ensure the demo accounts (defined in data/civicmind_config.json) exist so
-that a reviewer can sign in. Every complaint and incident on the dashboards is
-created by real user activity — nothing is pre-populated.
+Startup NEVER creates accounts with known passwords. Accounts come from:
+  * citizen self-registration;
+  * an admin creating officers/admins in the admin console;
+  * `python manage.py create-user ...` (local, explicit);
+  * CIVICMIND_ADMIN_EMAIL + CIVICMIND_ADMIN_PASSWORD env vars (creates that
+    admin once if missing — handy on a host);
+  * `python seed_demo.py` for the ISOLATED demo database only.
 
-`reset_data()` clears all civic data (complaints, incidents, actions, ...)
-while keeping user accounts, for a clean demo reset.
+`reset_data()` is refused unless the database is marked as a demo database.
 """
-from config import DEMO_ACCOUNTS
-from database import query, execute, db
-from auth import create_user, hash_password
+import os
+
+from database import query, db, is_demo_db
+from auth import create_user, verify_password
+
+# Passwords shipped by earlier versions of this project. If an account still
+# uses one, warn loudly — anyone who read the old README can sign in.
+_LEGACY_DEFAULTS = {"citizen@civicmind.in": "citizen123", "officer@civicmind.in": "officer123",
+                    "admin@civicmind.in": "admin123"}
 
 
 def bootstrap():
-    """Create any missing demo accounts. Safe to call on every startup."""
     created = []
-    for acc in DEMO_ACCOUNTS:
-        email = (acc.get("email") or "").lower().strip()
-        if not email:
-            continue
-        if query("SELECT id FROM users WHERE email=?", (email,), one=True):
-            continue
-        create_user(
-            name=acc.get("name") or email.split("@")[0],
-            email=email,
-            password=acc.get("password") or "changeme123",
-            role=acc.get("role", "citizen"),
-            phone=acc.get("phone"),
-            department=acc.get("department"),
-            ward=acc.get("ward"),
-        )
-        created.append(email)
-    return {"created_accounts": created}
+    email = os.environ.get("CIVICMIND_ADMIN_EMAIL", "").strip().lower()
+    password = os.environ.get("CIVICMIND_ADMIN_PASSWORD", "")
+    if email and password:
+        if len(password) < 12:
+            print("[CivicMind] CIVICMIND_ADMIN_PASSWORD must be at least 12 characters; admin not created.")
+        elif not query("SELECT id FROM users WHERE email=?", (email,), one=True):
+            create_user("Administrator", email, password, role="admin")
+            created.append(email)
+    weak = []
+    for em, pw in _LEGACY_DEFAULTS.items():
+        row = query("SELECT password_hash FROM users WHERE email=?", (em,), one=True)
+        if row and verify_password(pw, row["password_hash"]):
+            weak.append(em)
+    if weak:
+        print("[CivicMind] WARNING: these accounts still use the old published default passwords: "
+              + ", ".join(weak) + ". Change them (python manage.py set-password) before any public use.")
+    return {"created_accounts": created, "accounts_with_default_passwords": len(weak)}
 
 
 def reset_data():
-    """Delete all civic data, keep user accounts."""
-    with db() as conn:
-        # Order matters: children before parents (complaints reference incidents).
-        for t in ["notifications", "activity", "resolutions", "evidence",
-                  "actions", "incident_complaints", "complaints", "incidents"]:
+    """Delete all civic data, keep user accounts. DEMO DATABASE ONLY."""
+    if not is_demo_db():
+        raise PermissionError("Reset is only allowed on the isolated demo database.")
+    with db(immediate=True) as conn:
+        # The asset registry and its imported history are kept; only records
+        # produced by the complaint workflow are removed.
+        conn.execute("DELETE FROM asset_maintenance WHERE action_id IS NOT NULL")
+        for t in ["risk_findings", "complaint_assets", "notifications", "activity",
+                  "resolutions", "evidence", "actions", "incident_complaints"]:
             conn.execute(f"DELETE FROM {t}")
-        # Clear the dangling incident links defensively.
         conn.execute("UPDATE complaints SET incident_id=NULL")
+        conn.execute("DELETE FROM complaints")
+        conn.execute("DELETE FROM incidents")
     return {"reset": True}
-
-
-def ensure_admin(email, password, name="Admin"):
-    """Create (or update) an admin account — handy for real deployments."""
-    email = email.lower().strip()
-    existing = query("SELECT id FROM users WHERE email=?", (email,), one=True)
-    if existing:
-        execute("UPDATE users SET role='admin', password_hash=? WHERE id=?",
-                (hash_password(password), existing["id"]))
-        return existing["id"]
-    return create_user(name, email, password, role="admin")

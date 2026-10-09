@@ -1,15 +1,12 @@
 """
-CivicMind — public configuration endpoint.
-
-The frontend reads categories, departments, wards and the city centre from
-here, so nothing is hardcoded in the browser either. Safe to expose (contains
-no secrets).
+CivicMind — public configuration endpoints (no secrets, no passwords).
 """
 from fastapi import APIRouter
 
-from config import (CATEGORIES, DEPARTMENT_MAP, WARDS_RAW, CITY_NAME,
-                    CITY_CENTER, EXPOSE_DEMO_CREDENTIALS, DEMO_ACCOUNTS,
-                    CLUSTER_RADIUS_KM, CLUSTER_TIME_WINDOW_HOURS)
+from config import (CATEGORIES, DEPARTMENT_MAP, WARDS_RAW, CITY_NAME, CITY_CENTER, DEMO_MODE,
+                    DEMO_ACCOUNTS, CLUSTER_RADIUS_KM, CLUSTER_TIME_WINDOW_HOURS, MIN_CLUSTER_SIZE,
+                    REQUIRE_ISSUE_PHOTO, SERVICE_RADIUS_KM, ASSET_MATCH_RADIUS_M)
+from services import geo
 
 router = APIRouter(prefix="/api", tags=["config"])
 
@@ -19,22 +16,33 @@ def get_config():
     return {
         "city_name": CITY_NAME,
         "city_center": CITY_CENTER,
+        "service_radius_km": SERVICE_RADIUS_KM,
         "categories": CATEGORIES,
         "departments": sorted(set(DEPARTMENT_MAP.values())),
         "department_map": DEPARTMENT_MAP,
         "wards": WARDS_RAW,
-        "cluster": {"radius_km": CLUSTER_RADIUS_KM,
-                    "window_hours": CLUSTER_TIME_WINDOW_HOURS},
+        "ward_method": geo.WARD_METHOD,
+        "require_issue_photo": REQUIRE_ISSUE_PHOTO,
+        "cluster": {"radius_km": CLUSTER_RADIUS_KM, "window_hours": CLUSTER_TIME_WINDOW_HOURS,
+                    "min_reports": MIN_CLUSTER_SIZE},
+        "asset_match_radius_m": ASSET_MATCH_RADIUS_M,
     }
 
 
-@router.get("/demo-credentials")
-def demo_credentials():
-    """Only returned when explicitly enabled in the config file."""
-    if not EXPOSE_DEMO_CREDENTIALS:
+@router.get("/demo-info")
+def demo_info():
+    """In demo mode, list the demo account e-mails (NEVER passwords).
+    Passwords are generated locally by `seed_demo.py` and written to
+    data/demo/demo_credentials.txt on the presenter's machine."""
+    if not DEMO_MODE:
         return {"enabled": False, "accounts": []}
-    return {
-        "enabled": True,
-        "accounts": [{"role": a.get("role"), "email": a.get("email"),
-                      "password": a.get("password")} for a in DEMO_ACCOUNTS],
-    }
+    return {"enabled": True,
+            "accounts": [{"role": a.get("role"), "email": a.get("email"), "name": a.get("name")}
+                         for a in DEMO_ACCOUNTS],
+            "password_hint": "See data/demo/demo_credentials.txt on the presenter's machine."}
+
+
+@router.get("/demo-credentials", include_in_schema=False)
+def demo_credentials_removed():
+    # Kept so old frontends get a harmless answer; passwords are never served.
+    return {"enabled": False, "accounts": []}

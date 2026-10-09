@@ -15,3 +15,12 @@ uploads/*
 
 # OS
 .DS_Store
+
+# CivicMind v3 — private evidence, demo database and generated secrets
+private/
+data/demo/
+backend/.secret_key
+backend/*.db
+backend/*.db-wal
+backend/*.db-shm
+.pytest_cache/

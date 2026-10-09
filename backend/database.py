@@ -1,18 +1,24 @@
 """
 CivicMind — SQLite persistence layer.
 
-A single-file SQLite database keeps the prototype zero-setup while the
-schema stays PostgreSQL-ready. Every helper opens a short-lived connection,
-which is safe under uvicorn's threadpool and trivial to reason about.
+A single-file SQLite database keeps the prototype zero-setup. Every helper
+opens a short-lived connection, which is safe under uvicorn's threadpool.
+
+Schema changes are ADDITIVE ONLY: `init_db()` creates missing tables, adds
+missing columns and indexes, and backfills new columns. It never drops or
+recreates a table, so it is safe to run on every start against real data.
+
+Timestamps are stored as UTC text in SQLite's own format
+('YYYY-MM-DD HH:MM:SS') so string comparison == chronological comparison.
 """
-import sqlite3
 import contextlib
-from config import DB_PATH
+import secrets
+import sqlite3
+from datetime import datetime, timezone
+
+import config
 
 SCHEMA = """
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
 CREATE TABLE IF NOT EXISTS users (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     name          TEXT NOT NULL,
@@ -27,7 +33,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS complaints (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    public_id     TEXT NOT NULL UNIQUE,              -- CMP-000123
+    public_id     TEXT NOT NULL UNIQUE,              -- CMP-00123 (internal reference)
     user_id       INTEGER REFERENCES users(id),
     category      TEXT NOT NULL,
     description   TEXT NOT NULL,
@@ -36,26 +42,25 @@ CREATE TABLE IF NOT EXISTS complaints (
     address       TEXT,
     ward          TEXT,
     zone          TEXT,
-    image_path    TEXT,
-    image_hash    TEXT,                              -- sha256 of the proof-of-issue photo
-    proof_verified INTEGER,                          -- 1 verified | 0 flagged | NULL unchecked
-    proof_check   TEXT,                              -- JSON evidence-check result
+    image_path    TEXT,                              -- stored evidence file name (private)
+    image_hash    TEXT,
+    proof_verified INTEGER,
+    proof_check   TEXT,
     status        TEXT NOT NULL DEFAULT 'submitted', -- submitted|clustered|in_progress|resolved|rejected
-    severity      INTEGER NOT NULL DEFAULT 3,        -- 1..5
+    severity      INTEGER NOT NULL DEFAULT 3,
     ai_category   TEXT,
     ai_confidence REAL,
     ai_summary    TEXT,
     ai_engine     TEXT,                              -- sarvam | rules
     incident_id   INTEGER REFERENCES incidents(id),
-    -- direct officer resolution of a single complaint
     resolution_proof_path  TEXT,
     resolution_proof_check TEXT,
     resolution_image_hash  TEXT,
     resolved_by            INTEGER REFERENCES users(id),
     resolved_at            TEXT,
     resolution_notes       TEXT,
-    resolution_plan        TEXT,     -- AI-generated resolution plan (JSON)
-    eta_hours              REAL,     -- estimated resolution time
+    resolution_plan        TEXT,
+    eta_hours              REAL,
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -70,7 +75,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     severity           INTEGER NOT NULL DEFAULT 3,
     priority_score     REAL NOT NULL DEFAULT 0,
     priority_label     TEXT NOT NULL DEFAULT 'Medium',
-    affected_people    INTEGER NOT NULL DEFAULT 0,
+    affected_people    INTEGER NOT NULL DEFAULT 0,   -- = distinct reporting citizens
     spread_km          REAL NOT NULL DEFAULT 0,
     duration_hours     REAL NOT NULL DEFAULT 0,
     status             TEXT NOT NULL DEFAULT 'active',
@@ -104,8 +109,8 @@ CREATE TABLE IF NOT EXISTS actions (
     status        TEXT NOT NULL DEFAULT 'pending',   -- pending|approved|in_progress|completed|rejected
     approved_by   INTEGER REFERENCES users(id),
     notes         TEXT,
-    proof_path    TEXT,                              -- officer's proof-of-resolution photo
-    proof_check   TEXT,                              -- JSON evidence-check result
+    proof_path    TEXT,
+    proof_check   TEXT,
     image_hash    TEXT,
     created_at    TEXT NOT NULL DEFAULT (datetime('now')),
     approved_at   TEXT,
@@ -158,46 +163,163 @@ CREATE TABLE IF NOT EXISTS activity (
     incident_id INTEGER,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+-- ---------------------------------------------------------------------------
+-- Infrastructure intelligence (added in v3)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS assets (
+    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_code               TEXT NOT NULL UNIQUE,   -- e.g. SL-014
+    asset_type               TEXT NOT NULL,          -- streetlight | road_segment | drain | ...
+    name                     TEXT NOT NULL,
+    latitude                 REAL NOT NULL,
+    longitude                REAL NOT NULL,
+    ward                     TEXT,
+    department               TEXT,
+    operational_status       TEXT NOT NULL DEFAULT 'operational',
+    criticality              TEXT NOT NULL DEFAULT 'medium',  -- low|medium|high|critical
+    criticality_reason       TEXT,
+    inspection_interval_days INTEGER,
+    last_inspected_at        TEXT,
+    data_source              TEXT NOT NULL,
+    is_synthetic             INTEGER NOT NULL DEFAULT 0,
+    created_at               TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at               TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS asset_maintenance (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id      INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    event_type    TEXT NOT NULL,          -- inspection | repair | replacement | cleaning
+    performed_at  TEXT NOT NULL,
+    outcome       TEXT,
+    performed_by  TEXT,                   -- team / department (free text)
+    notes         TEXT,
+    data_source   TEXT NOT NULL,
+    is_synthetic  INTEGER NOT NULL DEFAULT 0,
+    recorded_by   INTEGER REFERENCES users(id),
+    action_id     INTEGER REFERENCES actions(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS complaint_assets (
+    complaint_id INTEGER PRIMARY KEY REFERENCES complaints(id) ON DELETE CASCADE,
+    asset_id     INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    distance_m   REAL,
+    method       TEXT NOT NULL,
+    reason       TEXT,
+    status       TEXT NOT NULL DEFAULT 'auto',   -- auto | confirmed | rejected
+    reviewed_by  INTEGER REFERENCES users(id),
+    matched_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS risk_findings (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    finding_key      TEXT NOT NULL UNIQUE,      -- rule + subject ids (idempotent upsert)
+    rule_id          TEXT NOT NULL,
+    finding_type     TEXT NOT NULL,
+    severity         TEXT NOT NULL,             -- low|medium|high|critical
+    asset_id         INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+    incident_id      INTEGER REFERENCES incidents(id) ON DELETE CASCADE,
+    supporting       TEXT,                      -- JSON {complaint_ids, maintenance_ids, ...}
+    explanation      TEXT NOT NULL,
+    recommended_step TEXT,
+    status           TEXT NOT NULL DEFAULT 'open',  -- open|acknowledged|dismissed|cleared
+    is_synthetic     INTEGER NOT NULL DEFAULT 0,
+    detected_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    reviewed_by      INTEGER REFERENCES users(id),
+    reviewed_at      TEXT,
+    review_note      TEXT
+);
+
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 # Columns added after v2 — applied automatically to existing databases.
 MIGRATIONS = {
+    "users":       [("token_version", "INTEGER NOT NULL DEFAULT 0"),
+                    ("is_active", "INTEGER NOT NULL DEFAULT 1")],
     "complaints":  [("image_hash", "TEXT"), ("proof_verified", "INTEGER"), ("proof_check", "TEXT"),
                     ("resolution_proof_path", "TEXT"), ("resolution_proof_check", "TEXT"),
                     ("resolution_image_hash", "TEXT"), ("resolved_by", "INTEGER"),
                     ("resolved_at", "TEXT"), ("resolution_notes", "TEXT"),
-                    ("resolution_plan", "TEXT"), ("eta_hours", "REAL")],
-    "actions":     [("proof_path", "TEXT"), ("proof_check", "TEXT"), ("image_hash", "TEXT")],
+                    ("resolution_plan", "TEXT"), ("eta_hours", "REAL"),
+                    ("tracking_code", "TEXT"), ("is_synthetic", "INTEGER NOT NULL DEFAULT 0")],
+    "incidents":   [("priority_factors", "TEXT"), ("asset_id", "INTEGER"),
+                    ("last_report_at", "TEXT"), ("resolved_at", "TEXT"),
+                    ("grouping_basis", "TEXT")],
+    "actions":     [("proof_path", "TEXT"), ("proof_check", "TEXT"), ("image_hash", "TEXT"),
+                    ("source", "TEXT"), ("created_by", "INTEGER"), ("rejected_by", "INTEGER"),
+                    ("rejected_at", "TEXT"), ("started_by", "INTEGER"),
+                    ("completed_by", "INTEGER"), ("rejection_reason", "TEXT")],
     "resolutions": [("proof_path", "TEXT"), ("proof_check", "TEXT"), ("image_hash", "TEXT"),
-                    ("resolved_by", "INTEGER"), ("complaint_id", "INTEGER")],
+                    ("resolved_by", "INTEGER"), ("complaint_id", "INTEGER"),
+                    ("action_id", "INTEGER"), ("verification_type", "TEXT")],
+    "activity":    [("actor_id", "INTEGER"), ("complaint_id", "INTEGER")],
 }
+
+INDEXES = [
+    "CREATE INDEX IF NOT EXISTS ix_complaints_user ON complaints(user_id)",
+    "CREATE INDEX IF NOT EXISTS ix_complaints_status ON complaints(status)",
+    "CREATE INDEX IF NOT EXISTS ix_complaints_incident ON complaints(incident_id)",
+    "CREATE INDEX IF NOT EXISTS ix_complaints_created ON complaints(created_at)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS ux_complaints_tracking ON complaints(tracking_code)",
+    "CREATE INDEX IF NOT EXISTS ix_incidents_status ON incidents(status)",
+    "CREATE INDEX IF NOT EXISTS ix_actions_incident ON actions(incident_id)",
+    "CREATE INDEX IF NOT EXISTS ix_notifications_user ON notifications(user_id, is_read)",
+    "CREATE INDEX IF NOT EXISTS ix_activity_incident ON activity(incident_id)",
+    "CREATE INDEX IF NOT EXISTS ix_assets_type ON assets(asset_type)",
+    "CREATE INDEX IF NOT EXISTS ix_maint_asset ON asset_maintenance(asset_id, performed_at)",
+    "CREATE INDEX IF NOT EXISTS ix_casset_asset ON complaint_assets(asset_id)",
+    "CREATE INDEX IF NOT EXISTS ix_findings_status ON risk_findings(status)",
+]
+
+
+def _db_path():
+    # Read at call time so tests (and the demo seeder) can point elsewhere.
+    return config.DB_PATH
 
 
 def get_conn():
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn = sqlite3.connect(_db_path(), timeout=30, isolation_level=None)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA busy_timeout = 30000")
     return conn
 
 
 @contextlib.contextmanager
-def db():
+def db(immediate=False):
+    """Transaction scope. `immediate=True` takes the write lock up front, so a
+    read-check-write sequence (state transitions) cannot interleave with
+    another writer."""
     conn = get_conn()
     try:
+        conn.execute("BEGIN IMMEDIATE" if immediate else "BEGIN")
         yield conn
-        conn.commit()
+        conn.execute("COMMIT")
     except Exception:
-        conn.rollback()
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
         raise
     finally:
         conn.close()
 
 
 def query(sql, params=(), one=False):
-    with db() as conn:
-        cur = conn.execute(sql, params)
-        rows = cur.fetchall()
+    conn = get_conn()
+    try:
+        rows = conn.execute(sql, params).fetchall()
         return (dict(rows[0]) if rows else None) if one else [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 def execute(sql, params=()):
@@ -206,21 +328,91 @@ def execute(sql, params=()):
         return cur.lastrowid
 
 
+def now():
+    """UTC timestamp in SQLite's datetime('now') format."""
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def parse_ts(ts):
+    """Parse either 'YYYY-MM-DD HH:MM:SS' or ISO 'YYYY-MM-DDTHH:MM:SS' (legacy)."""
+    if not ts:
+        return None
+    try:
+        return datetime.fromisoformat(str(ts).replace("Z", "").replace("T", " ").strip()[:19])
+    except ValueError:
+        return None
+
+
+def new_tracking_code():
+    # 10 chars from an unambiguous alphabet ≈ 50 bits — not enumerable.
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(10))
+
+
+def insert_with_public_id(conn, table, prefix, columns, values, width=5):
+    """Insert a row and derive its public id from the AUTOINCREMENT key.
+
+    AUTOINCREMENT ids are never reused, so `PREFIX-<id>` is unique even under
+    concurrent inserts, deletions or a data reset (unlike COUNT(*)+1).
+    """
+    placeholder = f"TMP-{secrets.token_hex(8)}"
+    cols = ", ".join(["public_id", *columns])
+    qs = ", ".join(["?"] * (len(columns) + 1))
+    cur = conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({qs})", (placeholder, *values))
+    row_id = cur.lastrowid
+    public_id = f"{prefix}-{row_id:0{width}d}"
+    conn.execute(f"UPDATE {table} SET public_id=? WHERE id=?", (public_id, row_id))
+    return row_id, public_id
+
+
 def _migrate(conn):
     for table, cols in MIGRATIONS.items():
         existing = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         for name, coltype in cols:
             if name not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {coltype}")
+    # Backfill private tracking codes for complaints filed before v3.
+    for row in conn.execute("SELECT id FROM complaints WHERE tracking_code IS NULL").fetchall():
+        conn.execute("UPDATE complaints SET tracking_code=? WHERE id=?",
+                     (new_tracking_code(), row["id"]))
+    # Normalise legacy ISO timestamps ('T' separator) written by older versions
+    # so string comparisons stay chronological.
+    for table, cols in {
+        "complaints": ["resolved_at", "updated_at"],
+        "incidents": ["updated_at"],
+        "actions": ["approved_at", "started_at", "completed_at"],
+    }.items():
+        for col in cols:
+            conn.execute(f"UPDATE {table} SET {col}=replace({col},'T',' ') WHERE {col} LIKE '____-__-__T%'")
+    for ddl in INDEXES:
+        conn.execute(ddl)
 
 
 def init_db():
-    with db() as conn:
+    conn = get_conn()
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
         conn.executescript(SCHEMA)
-        _migrate(conn)
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            _migrate(conn)
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '3')")
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    finally:
+        conn.close()
 
 
-def next_public_id(table, prefix, width=5):
-    with db() as conn:
-        row = conn.execute(f"SELECT COUNT(*) AS c FROM {table}").fetchone()
-        return f"{prefix}-{row['c'] + 1:0{width}d}"
+def get_meta(key):
+    row = query("SELECT value FROM meta WHERE key=?", (key,), one=True)
+    return row["value"] if row else None
+
+
+def is_demo_db():
+    return get_meta("demo_database") == "1"

@@ -1,145 +1,198 @@
 """
-CivicMind — evidence verification.
+CivicMind — photo evidence intake and automated checks.
 
-Every complaint must carry a photo of the issue, and every resolution must
-carry a photo of the fix. This module:
+What this module does:
+  1. Decodes a base64 data URL strictly and enforces a byte limit.
+  2. Validates the ACTUAL content with Pillow (JPEG / PNG / WebP only),
+     rejects malformed images and decompression bombs.
+  3. Re-encodes to JPEG, which strips EXIF metadata (including GPS) and any
+     payload appended to the file.
+  4. Stores the result in a PRIVATE directory under a server-generated name.
+     Nothing in that directory is served statically; files are only returned
+     by authorised API endpoints.
+  5. Runs deterministic checks: blank/uniform image, very low resolution,
+     tiny file, exact re-use of an earlier photo, resolution photo identical
+     to the original issue photo.
 
-  1. saves the image and computes simple forensic metadata (size, resolution,
-     brightness variance, SHA-256);
-  2. runs deterministic legitimacy checks (blank/uniform image, tiny file,
-     low resolution, duplicate/re-used image, proof identical to the issue
-     photo);
-  3. asks Sarvam AI to reason over the description + the forensic checks and
-     return a verdict.
-
-If a vision model is configured (SARVAM_VISION_MODEL) the image itself is
-sent to the model; otherwise the verdict combines forensics + AI reasoning.
-The result always reports which engine ran, so nothing is over-claimed.
-
-Pillow is used for the image forensics. If it is not installed the module
-degrades gracefully: it still saves the file and runs the size + duplicate
-checks, and simply skips the pixel-level checks (so a missing dependency can
-never take the whole app down).
+What it does NOT do: it cannot establish that a physical repair happened.
+The verdict means "the file passed automated integrity checks", nothing more.
 """
 import base64
+import binascii
 import hashlib
 import io
 import os
+import re
 import uuid
 
-try:
-    from PIL import Image, ImageStat
-    _PIL_AVAILABLE = True
-except Exception:  # noqa: BLE001
-    _PIL_AVAILABLE = False
+from PIL import Image, ImageOps, ImageStat
 
-from config import UPLOAD_DIR, SARVAM_VISION_MODEL
+from config import EVIDENCE_DIR, LEGACY_UPLOAD_DIR, MAX_IMAGE_BYTES, MAX_IMAGE_PIXELS
 from database import query
 from services import ai
 
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+ALLOWED_FORMATS = {"JPEG", "PNG", "WEBP"}
+_DATA_URL_RE = re.compile(r"^data:image/(jpeg|jpg|png|webp);base64,", re.I)
+_STORED_NAME_RE = re.compile(r"^[a-z]{3,12}-[0-9a-f]{32}\.jpg$")
+CHECK_SCOPE_NOTE = ("Automated file checks only (format, quality, re-use). "
+                    "This is not an independent field inspection.")
 
-# ---------------------------------------------------------------------------
-# Save + forensic metadata
-# ---------------------------------------------------------------------------
-def save_image(data_url: str, prefix="img"):
-    """Decode a data URL, write it to uploads/, return (path, meta)."""
-    if not data_url:
-        return None, None
+
+class EvidenceError(Exception):
+    def __init__(self, message, status=400):
+        super().__init__(message)
+        self.message = message
+        self.status = status
+
+
+def _decode(data_url: str) -> bytes:
+    if not isinstance(data_url, str) or not data_url:
+        raise EvidenceError("No photo was provided.")
+    m = _DATA_URL_RE.match(data_url[:40])
+    if not m:
+        raise EvidenceError("Unsupported file type. Upload a JPEG, PNG or WebP photo.", 415)
+    payload = data_url[m.end():]
+    if len(payload) > (MAX_IMAGE_BYTES * 4) // 3 + 8:
+        raise EvidenceError(f"Photo is too large (max {MAX_IMAGE_BYTES // (1024 * 1024)} MB).", 413)
     try:
-        raw = data_url.split(",", 1)[-1]
-        blob = base64.b64decode(raw)
-    except Exception:
-        return None, None
-    if len(blob) > 6 * 1024 * 1024:
-        return None, None
-    name = f"{prefix}-{uuid.uuid4().hex}.jpg"
-    path = os.path.join(UPLOAD_DIR, name)
-    with open(path, "wb") as f:
-        f.write(blob)
-    return f"/uploads/{name}", _meta(blob)
+        blob = base64.b64decode(payload, validate=True)
+    except (binascii.Error, ValueError):
+        raise EvidenceError("The photo data is corrupted.")
+    if len(blob) > MAX_IMAGE_BYTES:
+        raise EvidenceError(f"Photo is too large (max {MAX_IMAGE_BYTES // (1024 * 1024)} MB).", 413)
+    if len(blob) < 100:
+        raise EvidenceError("The photo is empty or unreadable.")
+    return blob
 
 
-def _meta(blob: bytes):
-    meta = {"bytes": len(blob), "sha256": hashlib.sha256(blob).hexdigest(),
-            "analyzed": _PIL_AVAILABLE}
-    if not _PIL_AVAILABLE:
-        meta["width"] = meta["height"] = 0
-        meta["mean"] = meta["std"] = 0
-        return meta
+def _load(blob: bytes):
+    """Return (rgb_image, format). Raises EvidenceError for anything unsafe."""
     try:
-        im = Image.open(io.BytesIO(blob))
-        meta["width"], meta["height"] = im.size
-        stat = ImageStat.Stat(im.convert("L"))
-        meta["mean"] = round(stat.mean[0], 2)
-        meta["std"] = round(stat.stddev[0], 2)   # low std => flat / blank image
+        probe = Image.open(io.BytesIO(blob))
+        fmt = probe.format
+        if fmt not in ALLOWED_FORMATS:
+            raise EvidenceError("Unsupported image format. Upload a JPEG, PNG or WebP photo.", 415)
+        w, h = probe.size
+        if w * h > MAX_IMAGE_PIXELS:
+            raise EvidenceError("Image dimensions are too large.", 413)
+        probe.verify()  # structural check
+        im = Image.open(io.BytesIO(blob))  # verify() invalidates the object
+        im.load()
+        im = ImageOps.exif_transpose(im)
+        return im.convert("RGB"), fmt
+    except EvidenceError:
+        raise
+    except (Image.DecompressionBombError, Image.DecompressionBombWarning):
+        raise EvidenceError("Image dimensions are too large.", 413)
     except Exception:
-        meta["width"] = meta["height"] = 0
-        meta["mean"] = meta["std"] = 0
-    return meta
+        raise EvidenceError("The file is not a valid image.")
 
 
-# ---------------------------------------------------------------------------
-# Deterministic legitimacy checks
-# ---------------------------------------------------------------------------
-def _forensic_flags(meta, kind, issue_hash=None):
+def _seen_before(sha):
+    return bool(query(
+        """SELECT 1 FROM complaints WHERE image_hash=:h OR resolution_image_hash=:h
+           UNION SELECT 1 FROM actions WHERE image_hash=:h
+           UNION SELECT 1 FROM resolutions WHERE image_hash=:h LIMIT 1""", {"h": sha}, one=True))
+
+
+def _flags(meta, kind, issue_hashes):
     flags, hard_fail = [], False
-    if not meta:
-        return ["No image could be read"], True
-
-    # Pixel-level checks (need Pillow).
-    if meta.get("analyzed"):
-        if meta.get("width", 0) < 200 or meta.get("height", 0) < 200:
-            flags.append("Very low resolution — hard to verify")
-        if meta.get("std", 0) < 8:
-            flags.append("Image looks blank or uniform")
-            hard_fail = True
-
-    # Checks that always run.
-    if meta.get("bytes", 0) < 8000:
-        flags.append("Image file is unusually small")
-    if kind == "issue" and _image_seen_before(meta["sha256"]):
-        flags.append("This exact image was already submitted before")
+    if meta["width"] < 200 or meta["height"] < 200:
+        flags.append("Very low resolution — hard to review")
+    if meta["std"] < 8:
+        flags.append("Image looks blank or uniform")
         hard_fail = True
-    if kind == "resolution" and issue_hash and meta["sha256"] == issue_hash:
-        flags.append("Proof photo is identical to the original issue photo")
+    if meta["bytes"] < 8000:
+        flags.append("Image file is unusually small")
+    if kind == "resolution" and meta["sha256"] in (issue_hashes or []):
+        flags.append("Proof photo is identical to an original issue photo")
+        hard_fail = True
+    elif _seen_before(meta["sha256"]):
+        flags.append("This exact image was already submitted before")
         hard_fail = True
     return flags, hard_fail
 
 
-def _image_seen_before(image_hash):
-    row = query("SELECT id FROM complaints WHERE image_hash=? LIMIT 1", (image_hash,), one=True)
-    if row:
-        return True
-    row = query("SELECT id FROM resolutions WHERE image_hash=? LIMIT 1", (image_hash,), one=True)
-    return bool(row)
+def process(data_url: str, kind: str, category: str = None, issue_hashes=None):
+    """Validate + store one photo. `kind` is 'issue' or 'resolution'.
 
-
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
-def verify(kind, description, category, data_url, issue_hash=None):
-    """kind = 'issue' (citizen proof) or 'resolution' (officer proof)."""
-    path, meta = save_image(data_url, prefix="proof")
-    if not path:
-        return {"ok": False, "verdict": "missing", "verified": False, "confidence": 0.0,
-                "reasons": ["No proof image was provided."],
-                "note": "A photo is required.", "engine": "rules",
-                "image_path": None, "image_hash": None}
-
-    flags, hard_fail = _forensic_flags(meta, kind, issue_hash)
-    result = ai.verify_evidence(kind, description, category, meta, flags, hard_fail,
-                                data_url=data_url if SARVAM_VISION_MODEL else None)
-
-    verified = result.get("verdict") == "verified"
-    return {
-        "ok": True,
-        "verdict": result.get("verdict", "needs_review"),
-        "verified": verified,
-        "confidence": result.get("confidence", 0.5),
-        "reasons": result.get("reasons", flags),
-        "note": result.get("note", ""),
-        "engine": result.get("engine", "rules"),
-        "image_path": path,
+    Returns a result dict. The file is only written when verdict != 'rejected'.
+    Raises EvidenceError for unusable input (bad type, too big, corrupt).
+    """
+    blob = _decode(data_url)
+    im, fmt = _load(blob)
+    stat = ImageStat.Stat(im.convert("L"))
+    meta = {"bytes": len(blob), "width": im.size[0], "height": im.size[1], "format": fmt,
+            "mean": round(stat.mean[0], 2), "std": round(stat.stddev[0], 2),
+            "sha256": hashlib.sha256(blob).hexdigest()}
+    flags, hard_fail = _flags(meta, kind, issue_hashes)
+    verdict = "rejected" if hard_fail else ("needs_review" if flags else "passed")
+    result = {
+        "verdict": verdict,
+        "passed": verdict == "passed",
+        "reasons": flags or ["Passed automated file checks"],
+        "note": CHECK_SCOPE_NOTE,
+        "engine": "automated_checks",
         "image_hash": meta["sha256"],
-        "meta": meta,
+        "meta": {k: meta[k] for k in ("bytes", "width", "height", "format")},
+        "stored_name": None,
+        "observation": None,
     }
+    if hard_fail:
+        return result
+    result["stored_name"] = _store(im, kind)
+    # Optional, informational only — never alters the verdict.
+    result["observation"] = ai.vision_observation(data_url, kind, category)
+    return result
+
+
+def _store(im, kind):
+    name = f"{re.sub('[^a-z]', '', kind)[:12] or 'img'}-{uuid.uuid4().hex}.jpg"
+    final = os.path.join(EVIDENCE_DIR, name)
+    tmp = final + ".part"
+    try:
+        im.save(tmp, format="JPEG", quality=88, optimize=True)  # no EXIF written
+        os.replace(tmp, final)
+    except Exception:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise EvidenceError("Could not store the photo. Please try again.", 500)
+    return name
+
+
+def discard(stored_name):
+    """Remove a stored file (used when the surrounding transaction fails)."""
+    path = resolve_path(stored_name)
+    if path and path.startswith(EVIDENCE_DIR):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def resolve_path(stored):
+    """Map a DB value to a real file path, or None. Accepts current stored
+    names and legacy '/uploads/<name>' values; rejects anything else, so a
+    crafted value can never escape the evidence directories."""
+    if not stored or not isinstance(stored, str):
+        return None
+    name = os.path.basename(stored.replace("\\", "/"))
+    legacy = re.match(r"^[a-z]{2,12}-[0-9a-f]{32}\.(jpg|jpeg|png|webp)$", name)
+    if not (_STORED_NAME_RE.match(name) or legacy):
+        return None
+    for base in (EVIDENCE_DIR, LEGACY_UPLOAD_DIR):
+        path = os.path.realpath(os.path.join(base, name))
+        if path.startswith(os.path.realpath(base) + os.sep) and os.path.isfile(path):
+            return path
+    return None
+
+
+def public_check(check):
+    """Strip internal fields before sending a check result to a client."""
+    if not isinstance(check, dict):
+        return None
+    verdict = {"verified": "passed", "flagged": "rejected"}.get(check.get("verdict"), check.get("verdict"))
+    return {"verdict": verdict, "reasons": check.get("reasons") or [],
+            "note": check.get("note") or CHECK_SCOPE_NOTE,
+            "engine": check.get("engine"), "observation": check.get("observation")}

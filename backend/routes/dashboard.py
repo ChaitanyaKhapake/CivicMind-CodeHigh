@@ -1,137 +1,137 @@
-"""CivicMind — dashboard metrics and chart data."""
-from datetime import datetime, timedelta
+"""CivicMind — dashboard metrics and chart data.
+
+Every metric is computed from rows at request time and has a stated
+definition (returned in `definitions` so the UI can show it). Percentages
+with a zero denominator are returned as null, not 0.
+"""
+import time
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 
-from auth import current_user
-from database import query
-from services import priority
+from auth import require_officer, require_citizen
+from database import query, parse_ts, utcnow
+from services import clustering
+from routes.common import safe_json
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
+OPEN_C = "status NOT IN ('resolved','rejected')"
+OPEN_I = "status != 'resolved'"
+DEFINITIONS = {
+    "open_complaints": "Complaints not yet resolved or rejected.",
+    "open_incidents": "Incidents (groups of related reports) not yet resolved.",
+    "high_priority_incidents": "Open incidents labelled High or Critical by the priority policy.",
+    "actions_awaiting_approval": "Response plans in 'pending' state.",
+    "actions_in_progress": "Plans approved or under way, not yet completed.",
+    "open_risk_findings": "Infrastructure risk findings that are open or acknowledged.",
+    "resolution_rate": "Resolved complaints ÷ all non-rejected complaints. Null when there are none.",
+    "median_resolution_hours": "Median hours from submission to resolution, resolved complaints only.",
+    "reporting_citizens": "Distinct citizens with at least one open complaint.",
+}
+_last_refresh = [0.0]
+
+
+def _c(sql, params=()):
+    return query(sql, params, one=True)["c"]
+
 
 @router.get("")
-def officer_dashboard(user: dict = Depends(current_user)):
-    total = query("SELECT COUNT(*) c FROM complaints", one=True)["c"]
-    open_complaints = query("SELECT COUNT(*) c FROM complaints WHERE status NOT IN ('resolved','rejected')", one=True)["c"]
-    resolved_complaints = query("SELECT COUNT(*) c FROM complaints WHERE status='resolved'", one=True)["c"]
-    active = query("SELECT COUNT(*) c FROM incidents WHERE status IN ('active','investigating','action_pending','in_progress','reopened')", one=True)["c"]
-    critical = query("SELECT COUNT(*) c FROM incidents WHERE priority_label='Critical' AND status NOT IN ('resolved')", one=True)["c"]
-    resolved = query("SELECT COUNT(*) c FROM incidents WHERE status='resolved'", one=True)["c"]
-    total_incidents = query("SELECT COUNT(*) c FROM incidents", one=True)["c"]
-    # Affected citizens estimate is based on OPEN complaints, so it falls as issues get resolved.
-    affected = sum(priority.estimate_affected(1, 0, r["severity"])
-                   for r in query("SELECT severity FROM complaints WHERE status NOT IN ('resolved','rejected')"))
-
-    # Average response time: incident creation -> action approval (hours)
-    rows = query("""SELECT i.created_at AS ic, a.approved_at AS ap FROM actions a
-                    JOIN incidents i ON i.id=a.incident_id WHERE a.approved_at IS NOT NULL""")
-    gaps = []
-    for r in rows:
+def officer_dashboard(user: dict = Depends(require_officer)):
+    # Age-dependent priority factors drift over time; refresh at most every 5 minutes.
+    if time.time() - _last_refresh[0] > 300:
+        _last_refresh[0] = time.time()
         try:
-            ic = datetime.fromisoformat(r["ic"]); ap = datetime.fromisoformat(r["ap"])
-            gaps.append((ap - ic).total_seconds() / 3600)
-        except Exception:
+            clustering.refresh_open_priorities()
+        except Exception:  # noqa: BLE001
             pass
-    avg_response = round(sum(gaps) / len(gaps), 1) if gaps else 0
+    total = _c("SELECT COUNT(*) c FROM complaints WHERE status != 'rejected'")
+    resolved = _c("SELECT COUNT(*) c FROM complaints WHERE status='resolved'")
+    hours = []
+    for r in query("SELECT created_at, resolved_at FROM complaints WHERE status='resolved' AND resolved_at IS NOT NULL"):
+        a, b = parse_ts(r["created_at"]), parse_ts(r["resolved_at"])
+        if a and b and b >= a:
+            hours.append((b - a).total_seconds() / 3600)
+    hours.sort()
+    median = None
+    if hours:
+        mid = len(hours) // 2
+        median = round(hours[mid] if len(hours) % 2 else (hours[mid - 1] + hours[mid]) / 2, 1)
 
-    # Resolution rate = share of citizen complaints that have been resolved.
-    resolution_rate = round(resolved_complaints / total * 100, 1) if total else 0
+    queue = query(f"""SELECT id, public_id, title, category, priority_score, priority_label, priority_factors,
+                      ward, status, report_count, created_at, asset_id FROM incidents WHERE {OPEN_I}
+                      ORDER BY priority_score DESC LIMIT 15""")
+    for q in queue:
+        q["reasons"] = (safe_json(q.pop("priority_factors"), {}) or {}).get("reasons", [])
+        q["asset_code"] = None
+        if q["asset_id"]:
+            a = query("SELECT asset_code FROM assets WHERE id=?", (q["asset_id"],), one=True)
+            q["asset_code"] = a["asset_code"] if a else None
 
-    # Repeat incident rate: share of incidents whose ward has >1 incident
-    ward_counts = query("SELECT ward, COUNT(*) c FROM incidents GROUP BY ward")
-    repeated = sum(w["c"] for w in ward_counts if w["c"] > 1)
-    repeat_rate = round(repeated / total_incidents * 100, 1) if total_incidents else 0
-
-    queue = query("""SELECT id, public_id, title, category, priority_score, priority_label,
-                     affected_people, ward, status, report_count, confidence, created_at
-                     FROM incidents WHERE status NOT IN ('resolved')
-                     ORDER BY priority_score DESC LIMIT 12""")
-
-    recent = query("""SELECT actor, action, detail, incident_id, created_at FROM activity
-                      ORDER BY id DESC LIMIT 15""")
-
+    findings = query("""SELECT f.id, f.rule_id, f.severity, f.explanation, f.incident_id, f.status, f.is_synthetic,
+                               a.asset_code FROM risk_findings f LEFT JOIN assets a ON a.id=f.asset_id
+                        WHERE f.status IN ('open','acknowledged')
+                        ORDER BY CASE f.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1
+                                 WHEN 'medium' THEN 2 ELSE 3 END, f.detected_at DESC LIMIT 8""")
     return {
         "metrics": {
             "total_complaints": total,
-            "open_complaints": open_complaints,
-            "resolved_complaints": resolved_complaints,
-            "active_incidents": active,
-            "critical_incidents": critical,
-            "resolved_incidents": resolved,
-            "affected_citizens": affected,
-            "avg_response_hours": avg_response,
-            "resolution_rate": resolution_rate,
-            "repeat_rate": repeat_rate,
-            "total_incidents": total_incidents,
+            "open_complaints": _c(f"SELECT COUNT(*) c FROM complaints WHERE {OPEN_C}"),
+            "resolved_complaints": resolved,
+            "open_incidents": _c(f"SELECT COUNT(*) c FROM incidents WHERE {OPEN_I}"),
+            "high_priority_incidents": _c(f"SELECT COUNT(*) c FROM incidents WHERE {OPEN_I} "
+                                          "AND priority_label IN ('Critical','High')"),
+            "resolved_incidents": _c("SELECT COUNT(*) c FROM incidents WHERE status='resolved'"),
+            "actions_awaiting_approval": _c("SELECT COUNT(*) c FROM actions WHERE status='pending'"),
+            "actions_in_progress": _c("SELECT COUNT(*) c FROM actions WHERE status IN ('approved','in_progress')"),
+            "open_risk_findings": _c("SELECT COUNT(*) c FROM risk_findings WHERE status IN ('open','acknowledged')"),
+            "resolution_rate": round(resolved / total * 100, 1) if total else None,
+            "median_resolution_hours": median,
+            "reporting_citizens": _c(f"SELECT COUNT(DISTINCT user_id) c FROM complaints WHERE {OPEN_C}"),
+            "synthetic_complaints": _c("SELECT COUNT(*) c FROM complaints WHERE is_synthetic=1"),
         },
+        "definitions": DEFINITIONS,
         "recent_reports": _recent_reports(),
         "priority_queue": queue,
-        "recent_activity": recent,
-        "alerts": [q for q in queue if q["priority_label"] in ("Critical", "High")][:5],
+        "findings": findings,
+        "recent_activity": query("""SELECT actor, action, detail, incident_id, created_at FROM activity
+                                    ORDER BY id DESC LIMIT 15"""),
     }
 
 
 @router.get("/charts")
-def charts(user: dict = Depends(current_user)):
-    categories = query("""SELECT category, COUNT(*) c FROM complaints GROUP BY category
-                          ORDER BY c DESC""")
-    statuses = query("SELECT status, COUNT(*) c FROM complaints GROUP BY status")
-    priorities = query("SELECT priority_label label, COUNT(*) c FROM incidents GROUP BY priority_label")
-    incident_status = query("SELECT status, COUNT(*) c FROM incidents GROUP BY status")
-    by_ward = query("SELECT ward, COUNT(*) c FROM complaints GROUP BY ward ORDER BY c DESC LIMIT 10")
-
-    # 7-day trend: complaints created vs incidents resolved
+def charts(user: dict = Depends(require_officer)):
     trend = []
+    today = utcnow().date()
     for i in range(6, -1, -1):
-        day = (datetime.utcnow() - timedelta(days=i)).date().isoformat()
-        created = query("SELECT COUNT(*) c FROM complaints WHERE date(created_at)=?", (day,), one=True)["c"]
-        resolved = query("SELECT COUNT(*) c FROM complaints WHERE date(resolved_at)=?", (day,), one=True)["c"]
-        trend.append({"day": day, "created": created, "resolved": resolved})
-
-    return {"categories": categories, "statuses": statuses, "priorities": priorities,
-            "incident_status": incident_status, "by_ward": by_ward, "trend": trend}
+        day = (today - timedelta(days=i)).isoformat()
+        trend.append({"day": day,
+                      "created": _c("SELECT COUNT(*) c FROM complaints WHERE date(created_at)=?", (day,)),
+                      "resolved": _c("SELECT COUNT(*) c FROM complaints WHERE date(resolved_at)=?", (day,))})
+    return {
+        "categories": query("SELECT category, COUNT(*) c FROM complaints GROUP BY category ORDER BY c DESC"),
+        "priorities": query(f"SELECT priority_label label, COUNT(*) c FROM incidents WHERE {OPEN_I} GROUP BY priority_label"),
+        "by_ward": query("SELECT COALESCE(ward,'Unmapped') ward, COUNT(*) c FROM complaints GROUP BY ward ORDER BY c DESC LIMIT 10"),
+        "trend": trend,
+    }
 
 
 @router.get("/citizen")
-def citizen_dashboard(user: dict = Depends(current_user)):
-    mine = query("SELECT COUNT(*) c FROM complaints WHERE user_id=?", (user["id"],), one=True)["c"]
-    resolved = query("SELECT COUNT(*) c FROM complaints WHERE user_id=? AND status='resolved'",
-                     (user["id"],), one=True)["c"]
-    in_progress = query("""SELECT COUNT(*) c FROM complaints WHERE user_id=?
-                           AND status IN ('clustered','in_progress')""", (user["id"],), one=True)["c"]
-    unread = query("SELECT COUNT(*) c FROM notifications WHERE user_id=? AND is_read=0",
-                   (user["id"],), one=True)["c"]
-    # City-wide impact the citizen is part of
-    joined = query("""SELECT COUNT(DISTINCT i.id) c FROM incidents i
-                      JOIN incident_complaints ic ON ic.incident_id=i.id
-                      JOIN complaints c ON c.id=ic.complaint_id WHERE c.user_id=?""",
-                   (user["id"],), one=True)["c"]
-    return {"my_complaints": mine, "resolved": resolved, "in_progress": in_progress,
-            "unread_notifications": unread, "incidents_joined": joined}
+def citizen_dashboard(user: dict = Depends(require_citizen)):
+    uid = (user["id"],)
+    return {
+        "my_complaints": _c("SELECT COUNT(*) c FROM complaints WHERE user_id=?", uid),
+        "resolved": _c("SELECT COUNT(*) c FROM complaints WHERE user_id=? AND status='resolved'", uid),
+        "in_progress": _c("SELECT COUNT(*) c FROM complaints WHERE user_id=? AND status IN ('clustered','in_progress')", uid),
+        "unread_notifications": _c("SELECT COUNT(*) c FROM notifications WHERE user_id=? AND is_read=0", uid),
+        "incidents_joined": _c("SELECT COUNT(DISTINCT incident_id) c FROM complaints WHERE user_id=? AND incident_id IS NOT NULL", uid),
+    }
 
 
 def _recent_reports():
-    """Latest complaints for the officer dashboard, including resolution info."""
-    rows = query("""
-        SELECT c.id AS complaint_id, c.public_id, c.category, c.ward, c.status,
-               c.severity, c.created_at, c.incident_id, c.proof_verified,
-               c.resolved_by, c.resolved_at, c.resolution_proof_check, c.resolution_proof_path,
-               u.name AS citizen_name, o.name AS officer_name
-        FROM complaints c
-        LEFT JOIN users u ON u.id = c.user_id
-        LEFT JOIN users o ON o.id = c.resolved_by
-        ORDER BY c.created_at DESC LIMIT 25""")
-    for r in rows:
-        r["resolution_proof_check"] = _safe_json(r.get("resolution_proof_check"))
-    return rows
-
-
-def _safe_json(val, default=None):
-    if val is None:
-        return default
-    try:
-        import json
-        return json.loads(val)
-    except Exception:
-        return default if default is not None else val
+    return query("""
+        SELECT c.id AS complaint_id, c.public_id, c.category, c.ward, c.status, c.severity, c.created_at,
+               c.incident_id, c.proof_verified, c.image_path IS NOT NULL AS has_photo, c.resolved_at,
+               c.is_synthetic, u.name AS citizen_name, o.name AS officer_name
+        FROM complaints c LEFT JOIN users u ON u.id = c.user_id LEFT JOIN users o ON o.id = c.resolved_by
+        ORDER BY c.created_at DESC, c.id DESC LIMIT 25""")
