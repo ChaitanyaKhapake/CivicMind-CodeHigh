@@ -519,7 +519,7 @@ function subscribe() {
   const token = CM.getToken();
   if (!token || typeof EventSource === 'undefined') return startPolling();
   let lastSig = '', failures = 0;
-  const es = new EventSource('api/stream?token=' + encodeURIComponent(token));
+  const es = new EventSource(CM.url('/api/stream?token=' + encodeURIComponent(token)));
   es.addEventListener('update', (ev) => {
     failures = 0;
     $('liveDot').textContent = 'Live updates on';

@@ -16,6 +16,13 @@ const CM = (() => {
     del(k) { try { localStorage.removeItem(k); } catch { /* ignore */ } },
   };
 
+  // Server address. Empty on the website (same origin). The citizen mobile app stores the CivicMind
+  // server it talks to (e.g. https://civicmind.example.org) under cm_api_base.
+  const API_BASE_KEY = 'cm_api_base';
+  const apiBase = () => (store.get(API_BASE_KEY) || '').trim().replace(/\/+$/, '');
+  /** Absolute or relative URL for a server path such as /api/complaints. */
+  const url = (path) => { const p = String(path).replace(/^\/+/, ''); const b = apiBase(); return b ? b + '/' + p : p; };
+
   const getToken = () => store.get(TOKEN_KEY);
   const getUser  = () => { try { return JSON.parse(store.get(USER_KEY)); } catch { return null; } };
   const setSession = (token, user) => { store.set(TOKEN_KEY, token); store.set(USER_KEY, JSON.stringify(user)); };
@@ -45,7 +52,7 @@ const CM = (() => {
     if (raw !== undefined) headers['Content-Type'] = raw.type || 'application/octet-stream';
     let res;
     try {
-      res = await fetch(path.replace(/^\/+/, ''), { method, headers,
+      res = await fetch(url(path), { method, headers,
         body: raw !== undefined ? raw : (body !== undefined ? JSON.stringify(body) : undefined) });
     } catch {
       const err = new Error('Network error — check your connection and try again.');
@@ -66,9 +73,9 @@ const CM = (() => {
   }
 
   /** Load a protected image (evidence is never public) into an <img>. */
-  async function authImage(img, url) {
+  async function authImage(img, src) {
     try {
-      const res = await fetch(url.replace(/^\/+/, ''), { headers: { Authorization: 'Bearer ' + (getToken() || '') } });
+      const res = await fetch(url(src), { headers: { Authorization: 'Bearer ' + (getToken() || '') } });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       img.src = URL.createObjectURL(blob);
@@ -258,7 +265,7 @@ const CM = (() => {
   }
   const fmtDay = (ts) => { const d = parseTs(ts); return d ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
 
-  return { api, getToken, getUser, setSession, clearSession, toast, fail, busy, requireAuth, homeFor, logout,
+  return { api, url, getToken, getUser, setSession, clearSession, toast, fail, busy, requireAuth, homeFor, logout,
            authImage, hydrateImages, mediaThumbs, fileToDataURL, esc, pClass, sevClass, sClass, statusText, titleCase, num,
            engineLabel, checkLabel, timeAgo, fmtDate, fmtDay, parseTs };
 })();

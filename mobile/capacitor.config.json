@@ -1,0 +1,14 @@
+{
+  "appId": "in.civicmind.citizen",
+  "appName": "CivicMind",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "localhost"
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  }
+}

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CivicMind</string>
+    <string name="title_activity_main">CivicMind</string>
+    <string name="package_name">in.civicmind.citizen</string>
+    <string name="custom_url_scheme">in.civicmind.citizen</string>
+</resources>

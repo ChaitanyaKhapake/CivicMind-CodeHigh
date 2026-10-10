@@ -24,3 +24,16 @@ backend/*.db
 backend/*.db-wal
 backend/*.db-shm
 .pytest_cache/
+
+# Citizen mobile app (Capacitor) — generated files, build output and the release signing key
+mobile/node_modules/
+mobile/www/
+mobile/android/keystore/
+mobile/android/keystore.properties
+mobile/android/local.properties
+mobile/android/app/src/main/assets/public/
+mobile/android/.gradle/
+mobile/android/build/
+mobile/android/app/build/
+mobile/android/capacitor-cordova-android-plugins/build/
+dist/

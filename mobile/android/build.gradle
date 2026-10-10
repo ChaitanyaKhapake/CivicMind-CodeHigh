@@ -1,0 +1,43 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+buildscript {
+    
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+        classpath 'com.google.gms:google-services:4.4.4'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// Use the Android build tools and platform installed on this machine for every module (app + Capacitor):
+// build-tools 36.1.0 and the Android 16 platform "android-36-ext19" (API 36, SDK extension 19).
+subprojects {
+    afterEvaluate { p ->
+        if (p.extensions.findByName("android") != null) {
+            p.android {
+                buildToolsVersion = rootProject.ext.buildToolsVersion
+                compileSdk = rootProject.ext.compileSdkVersion
+                compileSdkExtension = rootProject.ext.compileSdkExtension
+            }
+        }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
