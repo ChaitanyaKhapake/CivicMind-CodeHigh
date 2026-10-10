@@ -14,6 +14,13 @@ set "CIVICMIND_DEMO_MODE=1"
 set "CIVICMIND_CORS_ORIGINS=https://localhost"
 if not defined CIVICMIND_REVERSE_GEOCODER set "CIVICMIND_REVERSE_GEOCODER=nominatim"
 
+netstat -ano | findstr /r /c:":8000 .*LISTENING" >nul
+if not errorlevel 1 (
+  echo  Port 8000 is already in use - another CivicMind/server window is running.
+  echo  Close it first ^(a server started with run_demo.bat only accepts this PC, not phones^).
+  pause & exit /b 1
+)
+
 python -m pip install -q -r requirements.txt
 if errorlevel 1 ( echo  Dependency install failed. & pause & exit /b 1 )
 python seed_demo.py --db "%CIVICMIND_DB%"
@@ -23,6 +30,8 @@ echo.
 echo  Server address(es) to enter in the CivicMind app:
 for /f "tokens=2 delims=:" %%a in ('ipconfig ^| findstr /c:"IPv4"') do echo     http://%%a:8000
 echo  (remove the space after http://)   Ctrl+C to stop.
+echo  Phone on this PC's mobile hotspot: use the 192.168.137.x address. Same Wi-Fi router: use the Wi-Fi address.
+echo  If Windows asks whether to allow Python on the network, click Allow.
 echo.
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 pause
