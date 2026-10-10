@@ -131,7 +131,7 @@ def main():
     if args.reset:
         bootstrap.reset_data()
         with db() as conn:
-            conn.execute("DELETE FROM meta WHERE key='demo_seeded'")
+            conn.execute("DELETE FROM meta WHERE key IN ('demo_seeded', 'utility_demo_reports')")
         print("Demo civic data cleared.")
 
     # --- accounts --------------------------------------------------------------
@@ -176,6 +176,22 @@ def main():
                   f"{(res['asset_match'] or {}).get('asset_code')}")
         with db() as conn:
             conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('demo_seeded', '1')")
+
+    # --- synthetic utility network + fictional water-leak scenario ---------------
+    from services.utility_network import demo_data, findings as utility_findings
+    with db(immediate=True) as conn:
+        added = demo_data.seed(conn)
+    print(f"Utility network (synthetic): {added}")
+    if get_meta("utility_demo_reports") != "1":
+        for who, text, lat, lng, hours in demo_data.LEAK_REPORTS:
+            u = citizens[who % len(citizens)]
+            lang = "mr" if any("ऀ" <= ch <= "ॿ" for ch in text) else "en"
+            res = intake.create(u, "Water Leakage", text, lat, lng, created_at=_ago(hours=hours),
+                                is_synthetic=True, language=lang)
+            print(f"  {res['public_id']}  Water Leakage          incident={res['incident_id']}")
+        with db() as conn:
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('utility_demo_reports', '1')")
+    print("Utility findings:", utility_findings.safe_scan())
     summary = risk.scan()
     sample = os.path.join(os.path.dirname(db_path), "sample_proof_photo.jpg")
     if not os.path.exists(sample):

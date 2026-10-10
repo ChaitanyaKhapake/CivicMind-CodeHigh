@@ -51,7 +51,8 @@ def reset_data():
         # The asset registry and its imported history are kept; only records
         # produced by the complaint workflow are removed.
         conn.execute("DELETE FROM asset_maintenance WHERE action_id IS NOT NULL")
-        for t in ["risk_findings", "complaint_assets", "notifications", "activity",
+        for t in ["risk_findings", "utility_findings", "incident_utility_assets", "complaint_assets",
+                  "notifications", "activity",
                   "resolutions", "evidence", "actions", "incident_complaints"]:
             conn.execute(f"DELETE FROM {t}")
         conn.execute("UPDATE complaints SET incident_id=NULL")

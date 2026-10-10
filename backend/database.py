@@ -503,6 +503,9 @@ def init_db():
         conn.execute("BEGIN IMMEDIATE")
         try:
             _migrate(conn)
+            # Utility network tables (additive, idempotent).
+            from services.utility_network.schema import init_schema
+            init_schema(conn)
             conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '4')")
             conn.execute("COMMIT")
         except Exception:

@@ -3,21 +3,24 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>CivicMind — civic complaint intelligence</title>
-<meta name="description" content="CivicMind links citizen complaints to the infrastructure behind them, prioritises the work and tracks it to a verified, accountable outcome."/>
+<title>CivicMind — civic reports to actionable city intelligence</title>
+<meta name="description" content="CivicMind connects citizen reports to incidents, recorded infrastructure networks, accountable response workflows and verified outcomes."/>
 <link rel="icon" href="assets/favicon.svg"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="css/style.css"/>
 </head>
-<body>
+<body class="landing">
 
 <header class="nav">
   <div class="wrap nav-inner">
     <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""/> Civic<span class="brand-accent">Mind</span></a>
+    <nav class="nav-links land-links" aria-label="Sections">
+      <a href="#how">How it works</a><a href="#infra">Infrastructure</a><a href="#ai">AI assistance</a><a href="#trust">Trust</a>
+    </nav>
     <div class="nav-right">
-      <span class="badge brand-badge">Build with भारत 4.0 · prototype</span>
-      <a class="btn sm" href="#login">Sign in</a>
+      <a class="btn sm ghost" href="#login" data-tab="login">Sign in</a>
+      <a class="btn sm primary" href="#login" data-tab="register">Report an issue</a>
     </div>
   </div>
 </header>
@@ -25,22 +28,22 @@
 <section class="hero">
   <div class="wrap hero-grid">
     <div>
-      <div class="eyebrow">Civic complaint intelligence for municipal teams</div>
-      <h1>Every complaint is a clue.<br/>CivicMind finds the <span class="hl">underlying problem</span>.</h1>
-      <p class="lede">Citizens report issues. CivicMind groups related reports into incidents, links them to the
-        streetlight, road or drain behind them, flags infrastructure risks, ranks the work with a transparent score,
-        and tracks each response to a proof-backed, accountable outcome.</p>
+      <span class="eyebrow-pill">Civic operations intelligence</span>
+      <h1>From civic reports to actionable city intelligence</h1>
+      <p class="lede">A workspace for residents and municipal teams to report problems, connect them to recorded
+        infrastructure, coordinate the response with the right operator, and track each case to a verified outcome.</p>
       <div class="row wrap-row" style="margin-top:20px">
-        <a class="btn primary" href="#login" id="ctaReport">Report a civic issue →</a>
-        <a class="btn" href="#how">See how it works</a>
+        <a class="btn primary" href="#login" id="ctaReport" data-tab="register">Report a civic issue</a>
+        <a class="btn" href="#infra">See the infrastructure workspace</a>
       </div>
-      <div class="stat-strip" style="margin-top:30px" aria-live="polite">
+      <div class="stat-strip" style="margin-top:28px" aria-live="polite">
         <div class="s"><div class="n" id="sComplaints">—</div><div class="l">Citizen reports</div></div>
         <div class="s"><div class="n" id="sIncidents">—</div><div class="l">Incidents</div></div>
         <div class="s"><div class="n" id="sAssets">—</div><div class="l">Mapped assets</div></div>
         <div class="s"><div class="n" id="sAI">—</div><div class="l">Classification engine</div></div>
       </div>
-      <p class="tiny muted" id="demoNote" hidden style="margin-top:10px">⚠️ Demo database: all records shown are fictional and marked synthetic.</p>
+      <p class="tiny muted" style="margin-top:8px">Live counts from this installation.</p>
+      <p class="tiny muted" id="demoNote" hidden>Demo database: every record shown is fictional and labelled synthetic.</p>
     </div>
 
     <div class="auth-card" id="login">
@@ -57,7 +60,7 @@
           <input type="password" id="password" autocomplete="current-password" required maxlength="256"/></div>
         <div class="form-error" id="loginError" role="alert" hidden></div>
         <button class="btn primary block" id="loginBtn" type="submit">Sign in</button>
-        <p class="hint center" style="margin-top:10px">Officers and admins sign in here too — accounts are created by an administrator.</p>
+        <p class="hint center" style="margin-top:10px">Citizens, officers and administrators all sign in here. You are taken to the portal for your role.</p>
       </form>
 
       <form id="registerForm" novalidate hidden>
@@ -69,68 +72,134 @@
         <div class="field"><label class="f" for="rWard">Ward (optional)</label><select id="rWard"><option value="">— Not specified —</option></select></div>
         <div class="form-error" id="registerError" role="alert" hidden></div>
         <button class="btn primary block" id="registerBtn" type="submit">Create account</button>
+        <p class="hint center" style="margin-top:10px">New accounts are citizen accounts. Officer and admin accounts are created by an administrator.</p>
       </form>
 
       <div id="demoBox" hidden>
         <div class="divider"></div>
-        <div class="tiny muted" style="margin-bottom:8px">Demo accounts (fictional). Click to fill the email — the password is in <code>data/demo/demo_credentials.txt</code> on the presenter's machine.</div>
+        <div class="tiny muted" style="margin-bottom:8px">Demo accounts (fictional). Click to fill the email — passwords are in <code>data/demo/demo_credentials.txt</code> on the presenter's machine.</div>
         <div class="pill-list" id="demoFill"></div>
       </div>
     </div>
   </div>
 </section>
 
-<main class="wrap page" id="how">
-  <div class="center section-intro">
-    <div class="eyebrow">Report → Group → Link → Prioritise → Act → Verify</div>
-    <h2>One accountable path from a citizen's report to a resolved problem</h2>
-    <p class="muted">Each step is recorded with who did it and when. Officers stay in control: AI only suggests.</p>
-  </div>
-
-  <ol class="steps">
-    <li class="step-card"><div class="n">1</div><div class="t">Report</div><div class="d">Citizen pins the location, describes it, optionally adds a photo</div></li>
-    <li class="step-card"><div class="n">2</div><div class="t">Group</div><div class="d">Nearby related reports become one incident</div></li>
-    <li class="step-card"><div class="n">3</div><div class="t">Link</div><div class="d">Matched to a compatible asset within 150 m</div></li>
-    <li class="step-card"><div class="n">4</div><div class="t">Prioritise</div><div class="d">Bounded 0–100 score with visible factors</div></li>
-    <li class="step-card"><div class="n">5</div><div class="t">Act</div><div class="d">Officer approves, edits or rejects the plan</div></li>
-    <li class="step-card"><div class="n">6</div><div class="t">Verify</div><div class="d">Proof photo + recurrence check before closing</div></li>
-  </ol>
-
-  <div class="grid g3">
-    <div class="feature-card"><div class="fi fi-orange" aria-hidden="true">🧩</div><h3>Incident grouping</h3>
-      <p class="small muted">Reports of the same or closely related category within 1.5 km and 48 h are grouped. A pothole is never merged with a streetlight just because it's nearby.</p></div>
-    <div class="feature-card"><div class="fi fi-blue" aria-hidden="true">🏗️</div><h3>Infrastructure intelligence</h3>
-      <p class="small muted">Complaints are linked to the specific streetlight, road segment or drain they concern, building a maintenance and complaint history per asset.</p></div>
-    <div class="feature-card"><div class="fi fi-red" aria-hidden="true">🚩</div><h3>Risk findings</h3>
-      <p class="small muted">Rules flag repeated complaints on one asset, recurrence after a repair, critical assets, overdue inspections and conflicting work orders — each with its evidence.</p></div>
-    <div class="feature-card"><div class="fi fi-purple" aria-hidden="true">📊</div><h3>Explainable priority</h3>
-      <p class="small muted">Severity, report count, time unresolved, category safety weight and asset criticality add up to a score officers can read and challenge.</p></div>
-    <div class="feature-card"><div class="fi fi-green" aria-hidden="true">✅</div><h3>Accountable resolution</h3>
-      <p class="small muted">Work can only close with an approved plan and a proof photo that passes automated checks. The officer's name is recorded and citizens are notified.</p></div>
-    <div class="feature-card"><div class="fi fi-orange" aria-hidden="true">🔒</div><h3>Privacy by design</h3>
-      <p class="small muted">Citizens see only their own reports. Photos are private. Public tracking needs a private code and reveals only status.</p></div>
-  </div>
-
-  <div class="card honesty">
-    <h3>What this prototype does — and doesn't — claim</h3>
-    <ul class="small">
-      <li>Classification and plan drafting use Sarvam AI when configured, otherwise a transparent rule-based engine. Every result shows which one ran.</li>
-      <li>Photo checks detect invalid, blank, tiny or re-used images. They are <strong>not</strong> an independent field inspection.</li>
-      <li>Ward assignment uses the nearest configured ward centre, not official ward boundaries.</li>
-      <li>It is not connected to any municipal system. Demo data is fictional and labelled as synthetic.</li>
-    </ul>
-  </div>
-
-  <div class="card team-card">
-    <div class="row spread wrap-row">
-      <div>
-        <h3 style="margin-bottom:4px">Team CodeHigh · MIT ADT Pune</h3>
-        <p class="small muted" style="margin:0">Spparsh Mansuke · Chaitanya Khapake — Sustainability &amp; Social Impact</p>
+<main>
+  <section class="land-section" id="how">
+    <div class="wrap">
+      <div class="section-intro center">
+        <span class="eyebrow-pill">How it works</span>
+        <h2>Report · Connect · Respond</h2>
+        <p class="muted">One accountable path from a resident's report to a verified outcome. Every step records who acted and when.</p>
       </div>
-      <span class="badge">Hackathon prototype</span>
+      <div class="grid g3">
+        <article class="feature-card"><div class="step-no">01</div><h3>Report</h3>
+          <p class="small muted">Residents describe the problem in English, हिन्दी or मराठी, pin the location and optionally add a photo. They get a reference and a private tracking code.</p></article>
+        <article class="feature-card"><div class="step-no">02</div><h3>Connect</h3>
+          <p class="small muted">Related reports are grouped into incidents, matched to compatible assets nearby, and connected to the recorded utility network — with reasons shown for every match.</p></article>
+        <article class="feature-card"><div class="step-no">03</div><h3>Respond</h3>
+          <p class="small muted">Officers trace the network, contact the authorised operator, approve a plan, record progress and close the case only with accepted proof.</p></article>
+      </div>
     </div>
-  </div>
+  </section>
+
+  <section class="land-section alt" id="infra">
+    <div class="wrap land-split">
+      <div>
+        <span class="eyebrow-pill teal">Underground utility intelligence</span>
+        <h2>Click a pipe. See what it connects to.</h2>
+        <p class="muted">Officers select a water main, sewer, cable or gas line on the map and see the network as it is recorded — not as it looks.</p>
+        <ul class="check-list">
+          <li><strong>Recorded connections</strong> upstream and downstream, traced by a deterministic graph engine.</li>
+          <li><strong>Sources and candidate isolation points</strong> found along recorded paths, with verification status.</li>
+          <li><strong>Operator contacts</strong> with source and last-verified date. Fictional demo contacts are marked as such.</li>
+          <li><strong>Gaps stated plainly:</strong> missing links, unverified records and approximate geometry are flagged.</li>
+          <li><strong>Lines crossing on a map are never treated as a connection.</strong></li>
+        </ul>
+      </div>
+      <figure class="preview-card" aria-label="Illustration of a utility trace">
+        <div class="row spread"><strong class="small">Water main WM-DEMO-03 · upstream trace</strong><span class="badge synthetic">Illustration</span></div>
+        <svg viewBox="0 0 420 230" role="img" aria-label="A fictional water network: a source feeds a main through two valves to the segment where a leak was reported.">
+          <rect x="0" y="0" width="420" height="230" rx="10" fill="#F5F8FC"/>
+          <g stroke="#DCE4EE" stroke-width="10" stroke-linecap="round">
+            <line x1="0" y1="70" x2="420" y2="62"/><line x1="0" y1="170" x2="420" y2="182"/>
+            <line x1="120" y1="0" x2="138" y2="230"/><line x1="300" y1="0" x2="290" y2="230"/>
+          </g>
+          <polyline points="40,40 130,66 220,110 300,150" fill="none" stroke="#2D63D8" stroke-width="6" stroke-linecap="round"/>
+          <polyline points="220,110 250,200" fill="none" stroke="#9FB6E8" stroke-width="4" stroke-linecap="round"/>
+          <polyline points="300,150 390,140" fill="none" stroke="#9FB6E8" stroke-width="4" stroke-linecap="round" stroke-dasharray="6 6"/>
+          <rect x="28" y="28" width="24" height="24" rx="5" fill="#0F9D91"/>
+          <rect x="122" y="58" width="16" height="16" transform="rotate(45 130 66)" fill="#fff" stroke="#0F9D91" stroke-width="3"/>
+          <rect x="212" y="102" width="16" height="16" transform="rotate(45 220 110)" fill="#fff" stroke="#0F9D91" stroke-width="3"/>
+          <circle cx="285" cy="142" r="9" fill="#C93C3C" stroke="#fff" stroke-width="3"/>
+          <g font-family="Plus Jakarta Sans, sans-serif" font-size="11" fill="#172B4D">
+            <text x="58" y="34">Source (fictional)</text><text x="140" y="56">Valve V-01</text><text x="230" y="102">Valve V-02</text>
+            <text x="300" y="132">Reported leak</text><text x="320" y="166" fill="#66758A">no recorded link</text>
+          </g>
+        </svg>
+        <figcaption class="tiny muted">Fictional example. In the officer portal the same view is drawn from database records, with each asset's provenance.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="land-section" id="ai">
+    <div class="wrap">
+      <div class="section-intro center">
+        <span class="eyebrow-pill">AI assistance</span>
+        <h2>Help with the work, not decisions about it</h2>
+        <p class="muted">AI suggests, explains and drafts. Deterministic code computes distances, network paths, permissions and workflow rules, and people approve every consequential step.</p>
+      </div>
+      <div class="grid g3">
+        <article class="feature-card"><h3>Multilingual reporting</h3>
+          <p class="small muted">Category suggestions and follow-up questions in English, Hindi and Marathi. The citizen's own words are always kept; translations are stored separately after the citizen reviews them.</p></article>
+        <article class="feature-card"><h3>Utility Copilot</h3>
+          <p class="small muted">Officers ask "where does this pipe connect?" or "which valves are upstream?". Answers come from the recorded network and cite asset IDs, or say what data is missing.</p></article>
+        <article class="feature-card"><h3>Incident briefings</h3>
+          <p class="small muted">A structured summary of what was reported, the candidate assets, history and data gaps — facts kept apart from hypotheses, with a coordination checklist.</p></article>
+      </div>
+      <p class="tiny muted center" style="margin-top:14px">When no AI provider is available, rule-based classification and record-based answers keep every workflow running.</p>
+    </div>
+  </section>
+
+  <section class="land-section alt" id="portals">
+    <div class="wrap">
+      <div class="section-intro center"><span class="eyebrow-pill">Three portals, one record</span><h2>The right view for each role</h2></div>
+      <div class="grid g3">
+        <article class="feature-card"><h3>Citizen</h3><p class="small muted">Report an issue, follow its status in plain language, get notified of changes. Only your own reports are visible to you.</p></article>
+        <article class="feature-card"><h3>Officer</h3><p class="small muted">Priority queue, live map with utility layers, network tracing, operator coordination, action plans, evidence and verification.</p></article>
+        <article class="feature-card"><h3>Administrator</h3><p class="small muted">Users and roles, infrastructure data sources and validated imports, public-data discovery, data quality and audit history.</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="land-section" id="trust">
+    <div class="wrap land-split">
+      <div>
+        <span class="eyebrow-pill">Trust and accountability</span>
+        <h2>Honest about what the data shows</h2>
+        <p class="muted">Every infrastructure record carries its provenance, and the interface says when something is unverified or fictional.</p>
+        <div class="pill-list" style="margin:12px 0 4px">
+          <span class="chip static">Verified as-built</span><span class="chip static">Official, not field-verified</span>
+          <span class="chip static">Planned / design</span><span class="chip static">Approximate</span><span class="chip static">Synthetic demo</span>
+        </div>
+      </div>
+      <ul class="check-list">
+        <li>Access is enforced on the server for every request; menus only mirror it.</li>
+        <li>Citizens never see other residents' details or underground network records.</li>
+        <li>CivicMind records operator decisions. It never operates valves, switches or gas controls.</li>
+        <li>Imported data is previewed and validated, and only an administrator can commit it.</li>
+        <li>This is a hackathon prototype. It is not connected to any municipal system, and demo data is fictional.</li>
+      </ul>
+    </div>
+  </section>
 </main>
+
+<footer class="land-footer">
+  <div class="wrap row spread wrap-row">
+    <div><strong>CivicMind</strong> <span class="muted small">· Team CodeHigh, MIT ADT Pune · Build with भारत 4.0 prototype</span></div>
+    <nav class="row wrap-row small" aria-label="Footer"><a href="#how">How it works</a><a href="#infra">Infrastructure</a><a href="#trust">Trust</a><a href="#login">Sign in</a></nav>
+  </div>
+</footer>
 
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>

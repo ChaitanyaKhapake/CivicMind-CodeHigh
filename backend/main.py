@@ -27,7 +27,8 @@ from database import init_db, query, is_demo_db  # noqa: E402
 from services import bootstrap, ai  # noqa: E402
 from services.tinyfish import provider_status  # noqa: E402
 from routes import (auth_routes, complaints, incidents, actions, dashboard, admin,  # noqa: E402
-                    realtime, config_routes, infrastructure, data_sources, assistant, coordination)
+                    realtime, config_routes, infrastructure, data_sources, assistant, coordination,
+                    utility_network)
 
 log = logging.getLogger("civicmind")
 
@@ -117,8 +118,13 @@ class GuardMiddleware:
                 hdrs = list(msg.get("headers", []))
                 names = {h[0].lower() for h in hdrs}
                 hdrs += [h for h in SECURITY_HEADERS if h[0] not in names]
-                if scope["path"].startswith("/api/") and b"cache-control" not in names:
-                    hdrs.append((b"cache-control", b"no-store"))
+                path = scope["path"]
+                if b"cache-control" not in names:
+                    if path.startswith("/api/"):
+                        hdrs.append((b"cache-control", b"no-store"))
+                    elif path == "/" or path.endswith((".html", ".js", ".css")):
+                        # Revalidate (ETag) so a browser never runs stale pages after an update.
+                        hdrs.append((b"cache-control", b"no-cache"))
                 msg["headers"] = hdrs
             await send(msg)
 
@@ -176,7 +182,7 @@ def health():
 
 
 for r in (config_routes, auth_routes, complaints, incidents, actions, dashboard, admin,
-          realtime, infrastructure, data_sources, assistant, coordination):
+          realtime, infrastructure, data_sources, assistant, coordination, utility_network):
     app.include_router(r.router)
 
 # Short portal entry points. They only pick a page; every API call behind the

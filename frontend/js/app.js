@@ -13,6 +13,8 @@ function setTab(register) {
 }
 $('tabLogin').addEventListener('click', () => setTab(false));
 $('tabRegister').addEventListener('click', () => setTab(true));
+// Header / hero links choose which form is shown when they jump to the sign-in card.
+document.querySelectorAll('[data-tab]').forEach(a => a.addEventListener('click', () => setTab(a.dataset.tab === 'register')));
 
 function safeHome(home) {
   // Only follow same-origin, known pages returned by the server.

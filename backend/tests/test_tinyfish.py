@@ -361,7 +361,7 @@ def test_not_configured_state_is_clear(client, make_user, monkeypatch):
     admin = make_user("admin")
     st = admin.get("/api/admin/data-sources/status").json()
     assert st["configured"] is False and st["provider_mode"] == "not_configured" and "TINYFISH_API_KEY" in st["message"]
-    assert st["agent_enabled"] is False and st["utility_import_available"] is False
+    assert st["agent_enabled"] is False and st["utility_import_available"] is True
     r = admin.post("/api/admin/data-sources/discover", json=DISCOVER)
     assert r.status_code == 503 and r.json()["detail"]["code"] == "not_configured"
     r = admin.post("/api/admin/data-sources/fetch", json={"urls": ["https://pmc.gov.in/a"]})
@@ -404,11 +404,11 @@ def test_discover_fetch_review_flow_never_writes_assets(client, make_user, provi
     meta = admin.get(f"/api/admin/data-sources/snapshots/{snap['id']}/source-metadata").json()
     assert meta["provenance_class"] == "official_unverified" and meta["authority"] == "Pune Municipal Corporation"
     assert meta["source_url"] == first["url"] and meta["review"]["status"] == "reviewed"
-    assert meta["utility_import_available"] is False
+    assert meta["utility_import_available"] is True
 
     # Discovery and fetch never create or change infrastructure records.
     assert _table_counts() == before
-    assert not [t for t in _table_counts() if t.startswith("utility_")]
+    assert {"utility_assets", "utility_connections"} <= set(_table_counts())  # counted above: unchanged
     acts = [a["action"] for a in query("SELECT action FROM activity")]
     assert {"data_source_discovery", "data_source_fetch", "data_source_reviewed"} <= set(acts)
 
