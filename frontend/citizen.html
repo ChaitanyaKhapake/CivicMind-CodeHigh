@@ -38,16 +38,9 @@
     <section class="card" aria-labelledby="reportTitle">
       <div class="card-h"><h3 id="reportTitle" data-i18n="report_title">Report a civic issue</h3></div>
       <form id="reportForm" novalidate>
-        <div class="grid g2">
-          <div class="field">
-            <label class="f" for="category" data-i18n="category">Category</label>
-            <select id="category" required><option value="" data-i18n="choose_category">Choose a category…</option></select>
-          </div>
-          <div class="field">
-            <label class="f" for="photo"><span data-i18n="photo">Photo</span> <span class="muted" id="photoReq" data-i18n="optional">(optional)</span></label>
-            <input type="file" id="photo" accept="image/jpeg,image/png,image/webp"/>
-            <div class="hint" data-i18n="photo_hint">JPEG, PNG or WebP, up to 5 MB. Location data inside the photo is removed.</div>
-          </div>
+        <div class="field">
+          <label class="f" for="category" data-i18n="category">Category</label>
+          <select id="category" required><option value="" data-i18n="choose_category">Choose a category…</option></select>
         </div>
         <div class="field">
           <label class="f" for="description" data-i18n="problem">What is the problem?</label>
@@ -58,6 +51,39 @@
             <button type="button" class="btn sm" id="assistBtn" data-i18n="check">Check my report (optional)</button>
           </div>
           <div class="hint" data-i18n="check_hint">Suggests a category and, if available, an English translation. Nothing is submitted until you press Submit.</div>
+          <div class="voice-box" id="voiceBox">
+            <div class="row wrap-row" style="gap:8px">
+              <button type="button" class="btn sm" id="recBtn" aria-describedby="recWhy">🎤 <span data-i18n="rec_start">Record voice (max 15 s)</span></button>
+              <button type="button" class="btn sm" id="recStop" hidden>■ <span data-i18n="rec_stop">Stop</span></button>
+              <span class="rec-dot" id="recDot" hidden aria-live="polite"><span class="pulse"></span> <span id="recTime">0.0</span> s / 15 s</span>
+              <label class="small row" style="gap:6px"><span data-i18n="rec_lang">Language spoken</span>
+                <select id="recLang" class="sm-select"><option value="en">English</option><option value="hi">हिन्दी</option><option value="mr">मराठी</option></select></label>
+            </div>
+            <p class="tiny muted" id="recWhy" style="margin:6px 0 0" data-i18n="rec_why">Your browser will ask for microphone access only when you press Record. You can type instead.</p>
+            <div id="recReview" hidden>
+              <audio id="recAudio" controls preload="metadata"></audio>
+              <div class="row wrap-row" style="gap:6px">
+                <button type="button" class="btn sm ghost" id="recDiscard" data-i18n="rec_discard">Discard and re-record</button>
+                <span class="tiny muted" id="recStatus"></span>
+              </div>
+              <div id="transcriptBox" hidden>
+                <label class="f" for="transcript" data-i18n="rec_transcript">Transcript (AI-generated — check and edit)</label>
+                <textarea id="transcript" maxlength="2000" rows="3"></textarea>
+                <button type="button" class="btn sm" id="useTranscript" data-i18n="rec_use">Use as my description</button>
+              </div>
+              <p class="tiny muted" id="recDisclosure"></p>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label class="f" for="photo"><span data-i18n="photo">Photo</span> <span class="muted" id="photoReq" data-i18n="required">(required)</span></label>
+          <p class="tiny muted" style="margin:0 0 6px" data-i18n="photo_why">A photo is required so the team can see and assess the problem before visiting.</p>
+          <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" capture="environment" required/>
+          <div class="photo-preview" id="photoPreview" hidden>
+            <img id="photoImg" alt="Selected photo preview"/>
+            <button type="button" class="btn sm ghost" id="photoRemove" data-i18n="photo_remove">Remove / replace</button>
+          </div>
+          <div class="hint" data-i18n="photo_hint">JPEG, PNG or WebP, up to 5 MB. Location data inside the photo is removed.</div>
         </div>
         <div id="assistPanel" class="assist-panel" hidden aria-live="polite"></div>
         <div class="field">
@@ -69,16 +95,36 @@
           <div id="pickmap" class="pick-map" role="application" aria-label="Map: tap to set the issue location"></div>
           <div class="row spread wrap-row" style="margin-top:8px">
             <span class="hint" id="locText" data-i18n="loc_hint">Tap the map or drag the pin to the exact spot.</span>
-            <button type="button" class="btn sm ghost" id="geoBtn" data-i18n="use_location">📍 Use my location</button>
+            <button type="button" class="btn sm" id="geoBtn" data-i18n="use_location">📍 Use my current location</button>
           </div>
+          <div class="tiny muted" id="geoInfo" aria-live="polite"></div>
         </div>
         <div class="form-error" id="formError" role="alert" hidden></div>
-        <button class="btn primary block" id="submitBtn" type="submit" data-i18n="submit">Submit report</button>
+        <button class="btn primary block" id="submitBtn" type="submit" data-i18n="review_btn">Review report</button>
       </form>
+      <div class="review-panel card" id="reviewPanel" hidden role="dialog" aria-labelledby="reviewTitle">
+        <h3 id="reviewTitle" data-i18n="review_title">Check before you send</h3>
+        <div id="reviewBody"></div>
+        <div class="row wrap-row" style="margin-top:12px">
+          <button type="button" class="btn ghost" id="reviewEdit" data-i18n="review_edit">Edit</button>
+          <button type="button" class="btn primary" id="reviewSend" data-i18n="submit">Submit report</button>
+        </div>
+      </div>
       <div id="result" aria-live="polite"></div>
     </section>
 
     <aside>
+      <section class="card chat-card" style="margin-bottom:18px" aria-labelledby="chatTitle">
+        <div class="card-h"><h3 id="chatTitle" data-i18n="chat_title">Ask CivicMind</h3><span class="badge" id="chatEngine" data-i18n="chat_badge">Help</span></div>
+        <div class="chat-log" id="chatLog" aria-live="polite"></div>
+        <div class="pill-list" id="chatSuggest" style="margin:8px 0"></div>
+        <form class="row" id="chatForm" style="gap:6px">
+          <label class="sr-only" for="chatInput">Message</label>
+          <input id="chatInput" maxlength="500" autocomplete="off" style="flex:1"/>
+          <button class="btn sm primary" type="submit" data-i18n="chat_send">Send</button>
+        </form>
+        <p class="tiny muted" style="margin:6px 0 0" data-i18n="chat_note">Answers come from CivicMind's help content and your own reports only. It cannot submit for you.</p>
+      </section>
       <section class="card" style="margin-bottom:18px">
         <div class="card-h"><h3 data-i18n="updates">Updates</h3></div>
         <div class="list" id="liveFeed"><div class="empty small">Loading…</div></div>
@@ -104,6 +150,7 @@
 <script src="js/api.js"></script>
 <script src="js/common.js"></script>
 <script src="js/i18n.js"></script>
+<script src="js/voice-recorder.js"></script>
 <script src="js/citizen.js"></script>
 </body>
 </html>

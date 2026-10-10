@@ -318,6 +318,110 @@ CREATE TABLE IF NOT EXISTS source_agent_runs (
     created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Departments (seeded from data/civicmind_config.json; admins add/deactivate).
+CREATE TABLE IF NOT EXISTS departments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL UNIQUE,
+    description TEXT,
+    contact_role TEXT,
+    is_active   INTEGER NOT NULL DEFAULT 1,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Contractors / service providers that carry out work orders.
+CREATE TABLE IF NOT EXISTS contractors (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    contractor_code  TEXT NOT NULL UNIQUE,
+    name             TEXT NOT NULL,
+    department       TEXT,
+    contact_person   TEXT,
+    contact_role     TEXT,
+    phone            TEXT,
+    email            TEXT,
+    office_address   TEXT,
+    verification_status TEXT NOT NULL DEFAULT 'unverified',
+    is_synthetic     INTEGER NOT NULL DEFAULT 0,
+    is_active        INTEGER NOT NULL DEFAULT 1,
+    created_by       INTEGER REFERENCES users(id),
+    created_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Work orders: the execution layer under an approved response plan (action).
+-- assigned -> in_progress -> awaiting_verification -> verified
+--                      ^------------- rejected by officer --'
+-- assigned | in_progress -> cancelled
+CREATE TABLE IF NOT EXISTS work_orders (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    public_id        TEXT NOT NULL UNIQUE,          -- WO-00012
+    incident_id      INTEGER NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    action_id        INTEGER NOT NULL REFERENCES actions(id) ON DELETE CASCADE,
+    utility_asset_ids TEXT,                         -- JSON list of utility asset_id strings
+    department       TEXT,
+    contractor_id    INTEGER REFERENCES contractors(id),
+    team_name        TEXT,
+    task             TEXT NOT NULL,
+    priority         TEXT NOT NULL DEFAULT 'medium',
+    status           TEXT NOT NULL DEFAULT 'assigned',
+    est_start        TEXT,
+    est_completion   TEXT,
+    actual_start     TEXT,
+    actual_completion TEXT,
+    required_evidence TEXT NOT NULL DEFAULT 'after_photo',
+    verification_note TEXT,
+    created_by       INTEGER REFERENCES users(id),
+    verified_by      INTEGER REFERENCES users(id),
+    verified_at      TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS work_order_updates (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+    kind          TEXT NOT NULL,      -- created | started | progress | estimate_changed | submitted | accepted | rejected | cancelled | evidence
+    from_status   TEXT,
+    to_status     TEXT,
+    note          TEXT,
+    old_value     TEXT,
+    new_value     TEXT,
+    actor_id      INTEGER REFERENCES users(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS work_order_evidence (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_order_id INTEGER NOT NULL REFERENCES work_orders(id) ON DELETE CASCADE,
+    kind          TEXT NOT NULL,      -- before | after
+    stored_name   TEXT NOT NULL,
+    image_hash    TEXT NOT NULL,
+    check_json    TEXT NOT NULL,
+    note          TEXT,
+    uploaded_by   INTEGER REFERENCES users(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Short voice descriptions (private audio; transcript stored separately).
+CREATE TABLE IF NOT EXISTS voice_recordings (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    token            TEXT NOT NULL UNIQUE,
+    user_id          INTEGER NOT NULL REFERENCES users(id),
+    complaint_id     INTEGER REFERENCES complaints(id) ON DELETE SET NULL,
+    stored_name      TEXT,                 -- NULL once the audio is deleted by the retention policy
+    mime             TEXT NOT NULL,
+    duration_s       REAL NOT NULL,
+    sample_rate      INTEGER,
+    bytes            INTEGER NOT NULL,
+    language         TEXT,                 -- language the citizen selected
+    detected_language TEXT,                -- provider-reported language, if any
+    transcript       TEXT,                 -- AI-generated, unedited
+    transcript_status TEXT NOT NULL,       -- transcribed | unavailable | failed | empty
+    transcript_engine TEXT,
+    error_code       TEXT,
+    created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    linked_at        TEXT,
+    audio_deleted_at TEXT
+);
+
 -- Officer-recorded coordination with utility operators (water-leak response
 -- etc.). Human-entered facts only: the app never operates a utility.
 CREATE TABLE IF NOT EXISTS incident_operator_updates (
@@ -348,7 +452,11 @@ MIGRATIONS = {
                     # Multilingual intake: `description` is ALWAYS the citizen's original text.
                     ("original_language", "TEXT"), ("detected_language", "TEXT"),
                     ("description_translation_en", "TEXT"), ("translation_engine", "TEXT"),
-                    ("assistant_engine", "TEXT")],
+                    ("assistant_engine", "TEXT"),
+                    # Location provenance: how the pin was set, and any reverse-geocoded address (kept apart
+                    # from the citizen-typed `address`).
+                    ("location_source", "TEXT"), ("location_accuracy_m", "REAL"), ("geocoded_address", "TEXT"),
+                    ("voice_recording_id", "INTEGER")],
     "incidents":   [("priority_factors", "TEXT"), ("asset_id", "INTEGER"),
                     ("last_report_at", "TEXT"), ("resolved_at", "TEXT"),
                     ("grouping_basis", "TEXT")],
@@ -380,6 +488,12 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_snapshots_review ON source_snapshots(review_status, fetched_at)",
     "CREATE INDEX IF NOT EXISTS ix_agent_runs_created ON source_agent_runs(created_at)",
     "CREATE INDEX IF NOT EXISTS ix_operator_updates_incident ON incident_operator_updates(incident_id)",
+    "CREATE INDEX IF NOT EXISTS ix_wo_incident ON work_orders(incident_id)",
+    "CREATE INDEX IF NOT EXISTS ix_wo_status ON work_orders(status)",
+    "CREATE INDEX IF NOT EXISTS ix_wo_updates ON work_order_updates(work_order_id)",
+    "CREATE INDEX IF NOT EXISTS ix_wo_evidence ON work_order_evidence(work_order_id)",
+    "CREATE INDEX IF NOT EXISTS ix_wo_evidence_hash ON work_order_evidence(image_hash)",
+    "CREATE INDEX IF NOT EXISTS ix_voice_user ON voice_recordings(user_id, complaint_id)",
 ]
 
 
@@ -493,6 +607,9 @@ def _migrate(conn):
             conn.execute(f"UPDATE {table} SET {col}=replace({col},'T',' ') WHERE {col} LIKE '____-__-__T%'")
     for ddl in INDEXES:
         conn.execute(ddl)
+    # Departments named in the configuration always exist (admins can add more or deactivate them).
+    for name in sorted(set(config.DEPARTMENT_MAP.values())):
+        conn.execute("INSERT OR IGNORE INTO departments (name) VALUES (?)", (name,))
 
 
 def init_db():

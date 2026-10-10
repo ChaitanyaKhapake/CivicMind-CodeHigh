@@ -36,7 +36,7 @@ async function load() {
     $('loading').hidden = true; $('content').hidden = false;
     CM.hydrateImages($('content'));
     drawMini();
-    if (inc.view === 'staff') loadUtility();
+    if (inc.view === 'staff') { loadUtility(); loadWorkOrders(); }
   } catch (e) {
     $('loading').innerHTML = emptyState(e.status === 404 ? 'Incident not found, or you do not have access to it.' : e.message);
   }
@@ -73,6 +73,8 @@ function staffView(i) {
   <div class="detail-grid" style="margin-top:18px">
     <div>
       ${planCard(i)}
+      <section class="card" id="woCard" style="margin-bottom:18px"><div class="card-h"><h3>Work orders</h3></div>
+        <p class="small muted">Loading…</p></section>
       <section class="card" id="utilCtx" style="margin-bottom:18px"><div class="card-h"><h3>Utility network context</h3></div>
         <p class="small muted">Loading candidate assets…</p></section>
       ${coordinationCard(i)}
@@ -301,6 +303,10 @@ function reportsCard(i) {
           <div class="tiny muted">${CM.esc(c.category)} · ${CM.esc(c.citizen_name || 'Citizen')} · ${CM.esc(CM.timeAgo(c.created_at))} · severity ${CM.esc(c.severity)}/5</div>
           <p class="small" style="margin:4px 0">${CM.esc(c.description)}</p>
           ${c.language && c.language.translation_en ? `<p class="tiny muted" style="margin:0 0 4px">EN (citizen-reviewed translation): ${CM.esc(c.language.translation_en)}</p>` : ''}
+          ${c.voice ? `<div class="tiny" style="margin:2px 0 4px"><span class="badge">Voice ${CM.esc(c.voice.duration_s)} s · ${CM.esc(c.voice.language || '?')}</span>
+            <span class="muted">${CM.esc(c.voice.label)} — ${CM.esc(c.voice.transcription_status)}${c.voice.error_code ? ' (' + CM.esc(c.voice.error_code) + ')' : ''}</span>
+            ${c.voice.transcript ? `<p class="tiny" style="margin:2px 0"><em>${CM.esc(c.voice.transcript)}</em></p>` : ''}
+            ${c.voice.has_audio ? `<audio controls preload="none" data-auth-src="/api/complaints/${Number(c.id)}/voice" style="width:100%;height:32px"></audio>` : `<span class="muted">${c.voice.audio_deleted_at ? 'Audio deleted under the retention policy.' : 'No audio file on record.'}</span>`}</div>` : ''}
           ${c.asset_match ? `<div class="tiny">🏗️ ${CM.esc(c.asset_match.asset_code)} · ${CM.esc(Math.round(c.asset_match.distance_m || 0))} m ·
              <span class="muted">${CM.esc(c.asset_match.status)}</span>
              ${c.asset_match.status === 'auto' ? `<button class="link-btn" data-act="matchOk" data-id="${Number(c.id)}">confirm</button> ·
@@ -310,6 +316,85 @@ function reportsCard(i) {
     </div>
   </section>`;
 }
+
+/* Work orders: execution of the approved plan by a contractor or team. Completion needs an
+   accepted "after" photo; an officer accepts (resolves through the normal verification) or
+   rejects with a reason (work continues; history is kept). */
+let contractorsCache = null;
+const WO_STATUS = { assigned: 'Assigned', in_progress: 'In progress', awaiting_verification: 'Awaiting verification',
+  verified: 'Verified', cancelled: 'Cancelled' };
+async function loadWorkOrders() {
+  const box = $('woCard');
+  if (!box) return;
+  try {
+    const [wos, cons] = await Promise.all([CM.api(`/api/incidents/${encodeURIComponent(inc.id)}/work-orders`),
+      contractorsCache ? Promise.resolve(contractorsCache) : CM.api('/api/contractors')]);
+    contractorsCache = cons;
+    box.innerHTML = workOrdersCard(wos, cons, inc);
+    CM.hydrateImages(box);
+  } catch (e) { box.innerHTML = `<div class="card-h"><h3>Work orders</h3></div><p class="small text-red">${CM.esc(e.message)}</p>`; }
+}
+
+function workOrdersCard(wos, cons, i) {
+  const a = i.current_action;
+  const canCreate = a && ['approved', 'in_progress'].includes(a.status) && !wos.some(w => ['assigned', 'in_progress', 'awaiting_verification'].includes(w.status));
+  const ev = (w) => w.evidence.map(e => `<figure style="margin:0"><img class="thumb sm" alt="${CM.esc(e.kind)} photo" data-auth-src="/api/work-orders/${Number(w.id)}/evidence/${Number(e.id)}/photo"/>
+      <figcaption class="tiny muted">${CM.esc(e.kind)} · ${CM.esc(CM.checkLabel(e.check && e.check.verdict))}</figcaption></figure>`).join('');
+  const one = (w) => {
+    const c = w.contractor;
+    const open = ['assigned', 'in_progress'].includes(w.status);
+    return `<div class="wo ${w.overdue ? 'overdue' : ''}">
+      <div class="row spread wrap-row"><strong class="small">${CM.esc(w.public_id)} · ${CM.esc(w.task)}</strong>
+        <span class="badge ${w.status === 'verified' ? 'resolved' : w.status === 'awaiting_verification' ? 'approved' : w.status === 'cancelled' ? 'pending' : 'in_progress'}">${CM.esc(WO_STATUS[w.status] || w.status)}</span></div>
+      <div class="tiny muted">${CM.esc(w.department || '')} · priority ${CM.esc(w.priority)}${w.overdue ? ' · <strong class="text-red">overdue</strong>' : ''}</div>
+      ${c ? `<div class="contact ${c.is_synthetic ? 'warn' : 'ok'}"><strong class="small">${CM.esc(c.name)}</strong> <span class="tiny muted">${CM.esc(c.contractor_code)}</span>
+          <div class="tiny">${CM.esc(c.contact_person || '')} ${c.contact_role ? '(' + CM.esc(c.contact_role) + ')' : ''} · ${CM.esc(c.phone || c.email || 'no contact recorded')}</div>
+          <div class="tiny">${CM.esc(c.office_address || '')} <span class="badge ${c.is_synthetic ? 'synthetic' : c.verification_status === 'verified' ? 'low' : 'pending'}">${CM.esc(c.label)}</span></div></div>`
+        : `<div class="tiny">Team: ${CM.esc(w.team_name || '—')}</div>`}
+      <div class="kv"><span class="tiny muted">Estimated</span><span class="tiny">${CM.esc(w.est_start ? CM.fmtDate(w.est_start) : '—')} → ${CM.esc(w.est_completion ? CM.fmtDate(w.est_completion) : 'no estimate')}</span></div>
+      <div class="kv"><span class="tiny muted">Actual</span><span class="tiny">${CM.esc(w.actual_start ? CM.fmtDate(w.actual_start) : '—')} → ${CM.esc(w.actual_completion ? CM.fmtDate(w.actual_completion) : '—')}</span></div>
+      ${w.verification_note ? `<p class="tiny"><strong>Officer note:</strong> ${CM.esc(w.verification_note)}</p>` : ''}
+      ${w.evidence.length ? `<div class="evidence-strip">${ev(w)}</div>` : ''}
+      <details class="tiny"><summary>History (${(w.history || []).length})</summary>
+        ${(w.history || []).map(h => `<div>${CM.esc(CM.fmtDate(h.created_at))} · ${CM.esc(h.actor || '')} · ${CM.esc(h.kind)}${h.to_status ? ' → ' + CM.esc(h.to_status) : ''}${h.new_value ? ' (' + CM.esc(h.new_value) + ')' : ''}${h.note ? ' — ' + CM.esc(h.note) : ''}</div>`).join('')}</details>
+      <div class="row wrap-row" style="gap:6px;margin-top:8px">
+        ${w.status === 'assigned' ? `<button class="btn sm" data-act="woStart" data-id="${Number(w.id)}">Mark started</button>` : ''}
+        ${open ? `<input id="woNote${Number(w.id)}" placeholder="Progress note" maxlength="500" style="flex:1;min-width:160px"/>
+          <input id="woEst${Number(w.id)}" type="datetime-local" aria-label="New estimated completion"/>
+          <button class="btn sm" data-act="woProgress" data-id="${Number(w.id)}">Save update</button>` : ''}
+      </div>
+      ${open ? `<div class="row wrap-row" style="gap:6px;margin-top:6px">
+          <label class="tiny">Photo <select id="woKind${Number(w.id)}" class="sm-select"><option value="after">After (completion)</option><option value="before">Before</option></select></label>
+          <input type="file" id="woFile${Number(w.id)}" accept="image/jpeg,image/png,image/webp" capture="environment"/>
+          <button class="btn sm" data-act="woEvidence" data-id="${Number(w.id)}">Upload</button>
+          ${w.status === 'in_progress' ? `<button class="btn sm primary" data-act="woSubmit" data-id="${Number(w.id)}">Submit for verification</button>` : ''}
+          <button class="btn sm ghost" data-act="woCancel" data-id="${Number(w.id)}">Cancel order</button></div>` : ''}
+      ${w.status === 'awaiting_verification' ? `<div class="row wrap-row" style="gap:6px;margin-top:8px">
+          <input id="woReason${Number(w.id)}" placeholder="Verification note / reason for rejection" maxlength="500" style="flex:1;min-width:200px"/>
+          <button class="btn sm green" data-act="woAccept" data-id="${Number(w.id)}">Accept completed work</button>
+          <button class="btn sm red" data-act="woReject" data-id="${Number(w.id)}">Reject — continue work</button></div>
+        <p class="tiny muted">Accepting resolves the incident through the normal workflow verification (proof photo + recurrence check). A photo does not prove a physical repair.</p>` : ''}
+    </div>`;
+  };
+  const conts = cons.filter(c => c.is_active);
+  return `<div class="card-h"><h3>Work orders</h3><span class="badge">${wos.length}</span></div>
+    ${wos.map(one).join('') || '<p class="small muted">No work orders yet.</p>'}
+    ${canCreate ? `<details style="margin-top:10px" open><summary class="small"><strong>Issue a work order</strong></summary>
+      <div class="grid g2" style="gap:10px;margin-top:8px">
+        <div class="field"><label class="f" for="woTask">Task</label><input id="woTask" maxlength="400" value="${CM.esc(a.action_text || '')}"/></div>
+        <div class="field"><label class="f" for="woContractor">Contractor</label><select id="woContractor"><option value="">— Internal team —</option>
+          ${conts.map(c => `<option value="${Number(c.id)}">${CM.esc(c.name)}${c.is_synthetic ? ' (fictional)' : ''}</option>`).join('')}</select></div>
+        <div class="field"><label class="f" for="woTeam">Internal team (if no contractor)</label><input id="woTeam" maxlength="120" value="${CM.esc(a.assigned_team || '')}"/></div>
+        <div class="field"><label class="f" for="woPriority">Priority</label><select id="woPriority"><option>medium</option><option>high</option><option>critical</option><option>low</option></select></div>
+        <div class="field"><label class="f" for="woStartAt">Estimated start</label><input id="woStartAt" type="datetime-local"/></div>
+        <div class="field"><label class="f" for="woDoneAt">Estimated completion</label><input id="woDoneAt" type="datetime-local"/></div>
+      </div>
+      <p class="tiny muted">Times are entered in your local time and stored in UTC. Citizens see the scheduled completion, never contractor contact details.</p>
+      <button class="btn sm primary" data-act="woCreate">Issue work order</button></details>`
+      : (a && a.status === 'pending' ? '<p class="tiny muted">Approve the response plan to issue a work order.</p>' : '')}`;
+}
+
+const localToUtc = (v) => v ? new Date(v).toISOString().slice(0, 16).replace('T', ' ') : null;
 
 /* Utility network context: candidate assets come from the API (compatible type + recorded
    geometry within a radius). They are candidates, never causes, until an officer confirms. */
@@ -441,6 +526,14 @@ function citizenView(i) {
 /* =====================================================================
    Actions
    ===================================================================== */
+async function woPost(path, body, okMsg, reloadAll) {
+  try {
+    await CM.api(path, { method: 'POST', body });
+    CM.toast(okMsg, 'ok');
+    if (reloadAll) await load(); else await loadWorkOrders();
+  } catch (e) { CM.fail(e); }
+}
+
 async function post(path, body, okMsg) {
   try { await CM.api(path, { method: 'POST', body: body || {} }); CM.toast(okMsg, 'ok'); await load(); }
   catch (e) { CM.fail(e); if (e.status === 409) load(); }
@@ -515,6 +608,31 @@ async function onClick(e) {
         CM.toast(btn.dataset.status === 'confirmed' ? 'Asset confirmed as relevant' : 'Asset marked not related', 'ok');
       } catch (ex) { CM.fail(ex); }
     });
+    case 'woCreate': return run('Issuing…', () => woPost(`/api/incidents/${encodeURIComponent(inc.id)}/work-orders`, {
+      task: $('woTask').value.trim(), contractor_id: $('woContractor').value ? Number($('woContractor').value) : null,
+      team_name: $('woTeam').value.trim() || null, priority: $('woPriority').value,
+      est_start: localToUtc($('woStartAt').value), est_completion: localToUtc($('woDoneAt').value),
+      utility_asset_ids: (utilCtx ? utilCtx.candidates.filter(c => c.link_status === 'confirmed').map(c => c.asset_id) : []),
+    }, 'Work order issued'));
+    case 'woStart': return run('…', () => woPost(`/api/work-orders/${btn.dataset.id}/start`, {}, 'Work order started'));
+    case 'woProgress': return run('Saving…', () => woPost(`/api/work-orders/${btn.dataset.id}/progress`, {
+      note: $('woNote' + btn.dataset.id).value.trim() || null, est_completion: localToUtc($('woEst' + btn.dataset.id).value) }, 'Update recorded'));
+    case 'woEvidence': {
+      const f = $('woFile' + btn.dataset.id).files[0];
+      if (!f) return CM.toast('Choose a photo first.', 'err');
+      return run('Checking photo…', async () => woPost(`/api/work-orders/${btn.dataset.id}/evidence`,
+        { kind: $('woKind' + btn.dataset.id).value, photo: await CM.fileToDataURL(f) }, 'Photo accepted'));
+    }
+    case 'woSubmit': return run('…', () => woPost(`/api/work-orders/${btn.dataset.id}/submit`, {}, 'Submitted for verification'));
+    case 'woAccept': return run('Verifying…', () => woPost(`/api/work-orders/${btn.dataset.id}/verify`,
+      { decision: 'accept', reason: $('woReason' + btn.dataset.id).value.trim() || null }, 'Completed work accepted', true));
+    case 'woReject': return run('…', () => woPost(`/api/work-orders/${btn.dataset.id}/verify`,
+      { decision: 'reject', reason: $('woReason' + btn.dataset.id).value.trim() }, 'Rejected — work continues'));
+    case 'woCancel': {
+      const reason = prompt('Reason for cancelling this work order (5+ characters):');
+      if (!reason) return;
+      return run('…', () => woPost(`/api/work-orders/${btn.dataset.id}/cancel`, { reason }, 'Work order cancelled'));
+    }
     case 'briefing': return run('Preparing…', async () => {
       try { $('briefingBox').innerHTML = briefingView(await CM.api(`/api/incidents/${encodeURIComponent(inc.id)}/briefing`, { method: 'POST' })); }
       catch (ex) { CM.fail(ex); }

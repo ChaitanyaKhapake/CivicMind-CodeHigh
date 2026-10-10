@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from auth import current_user, require_officer, is_staff
 from database import query, execute, db, now
 from services import clustering, ai, geo, risk, evidence, assets as asset_svc
-from services import actions as action_svc, coordination
+from services import actions as action_svc, coordination, voice as voice_svc
 from routes.common import safe_json, raise_from, language_view
 
 router = APIRouter(prefix="/api", tags=["incidents"])
@@ -142,6 +142,7 @@ def _staff_view(inc):
             "photo_check": evidence.public_check(safe_json(c["proof_check"])),
             "asset_match": m, "is_synthetic": bool(c.get("is_synthetic")),
             "language": language_view(c),
+            "voice": voice_svc.for_complaint(c["id"]),
         })
     out["evidence"] = query("SELECT evidence_type, value, source FROM evidence WHERE incident_id=? ORDER BY id",
                             (inc["id"],))

@@ -34,8 +34,8 @@
       <div class="card-h pad"><h3>Users &amp; roles</h3></div>
       <div class="table-wrap">
         <table class="table" id="usersTable">
-          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Ward</th></tr></thead>
-          <tbody><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
+          <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Active</th><th></th></tr></thead>
+          <tbody><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -65,6 +65,33 @@
         <div class="eyebrow">Departments</div><div class="pill-list" id="cfgDepts" style="margin-top:8px"></div>
       </section>
     </aside>
+  </div>
+
+  <div class="detail-grid" style="margin-top:18px">
+    <section class="card flush"><div class="card-h pad"><h3>Departments</h3></div>
+      <div class="table-wrap"><table class="table" id="deptTable"><thead><tr><th>Department</th><th>Officers</th><th>Status</th><th></th></tr></thead>
+        <tbody><tr class="static"><td colspan="4" class="empty">Loading…</td></tr></tbody></table></div>
+      <form class="row wrap-row pad" id="deptForm" style="gap:8px">
+        <label class="sr-only" for="deptName">New department</label>
+        <input id="deptName" maxlength="120" placeholder="New department name" style="flex:1;min-width:200px"/>
+        <button class="btn sm" type="submit">Add department</button></form>
+      <p class="tiny muted pad" style="margin:0">Departments used for complaint routing come from <code>data/civicmind_config.json</code> and cannot be deactivated here.</p>
+    </section>
+    <section class="card"><div class="card-h"><h3>Contractors</h3></div>
+      <div id="conList" class="list"><p class="small muted">Loading…</p></div>
+      <details style="margin-top:10px"><summary class="small"><strong>Register a contractor</strong></summary>
+        <form id="conForm" novalidate style="margin-top:8px">
+          <div class="grid g2" style="gap:8px">
+            <div class="field"><label class="f" for="conCode">Code</label><input id="conCode" maxlength="32" placeholder="CON-012"/></div>
+            <div class="field"><label class="f" for="conName">Name</label><input id="conName" maxlength="120"/></div>
+            <div class="field"><label class="f" for="conDept">Department</label><input id="conDept" maxlength="120"/></div>
+            <div class="field"><label class="f" for="conPerson">Contact person / role</label><input id="conPerson" maxlength="120"/></div>
+            <div class="field"><label class="f" for="conPhone">Verified phone</label><input id="conPhone" maxlength="40"/></div>
+            <div class="field"><label class="f" for="conAddr">Office address</label><input id="conAddr" maxlength="300"/></div>
+          </div>
+          <label class="row small" style="gap:8px"><input type="checkbox" id="conSynthetic" style="width:auto"/> Fictional demo record</label>
+          <button class="btn sm primary" type="submit" style="margin-top:8px">Register (as unverified)</button></form></details>
+    </section>
   </div>
 
   <div class="section-title"><h2>Utility network data</h2><span class="grow"></span>
@@ -104,6 +131,35 @@
     <section class="card"><div class="card-h"><h3>Utility findings</h3><button class="btn sm" id="ufScan">Re-run rules</button></div>
       <div id="ufList" class="list"><p class="small muted">Loading…</p></div></section>
   </div>
+
+  <section class="card" style="margin-top:18px" id="regMgmt">
+    <div class="card-h"><h3>Registry records</h3><span class="badge">Every change is logged</span></div>
+    <div class="grid g3" style="gap:14px">
+      <form id="regConn" novalidate><h4 style="margin:0 0 8px">Record a connection</h4>
+        <div class="field"><label class="f" for="rcFrom">From asset ID</label><input id="rcFrom" maxlength="64"/></div>
+        <div class="field"><label class="f" for="rcTo">To asset ID</label><input id="rcTo" maxlength="64"/></div>
+        <div class="field"><label class="f" for="rcDir">Direction</label><select id="rcDir"><option value="unknown">Unknown</option><option value="downstream">Flows from → to</option><option value="bidirectional">Bidirectional</option></select></div>
+        <div class="field"><label class="f" for="rcNote">Source / basis</label><input id="rcNote" maxlength="200" placeholder="e.g. As-built sheet 12, 1994"/></div>
+        <button class="btn sm" type="submit">Add (unverified)</button></form>
+      <form id="regVerify" novalidate><h4 style="margin:0 0 8px">Verification decision</h4>
+        <div class="field"><label class="f" for="rvKind">Record type</label><select id="rvKind"><option value="asset">Asset</option><option value="connection">Connection</option><option value="contact">Contact</option></select></div>
+        <div class="field"><label class="f" for="rvId">Record ID</label><input id="rvId" maxlength="64" placeholder="e.g. V-DEMO-03"/></div>
+        <div class="field"><label class="f" for="rvStatus">Decision</label><select id="rvStatus"><option value="verified">Verified</option><option value="unverified">Unverified</option><option value="disputed">Disputed</option></select></div>
+        <div class="field"><label class="f" for="rvNote">Evidence / note</label><input id="rvNote" maxlength="300" placeholder="e.g. Operator site visit 10 Oct"/></div>
+        <button class="btn sm" type="submit">Record decision</button></form>
+      <form id="regContact" novalidate><h4 style="margin:0 0 8px">Add operator contact</h4>
+        <div class="field"><label class="f" for="ctOrg">Organisation</label><input id="ctOrg" maxlength="120"/></div>
+        <div class="field"><label class="f" for="ctRole">Role</label><input id="ctRole" maxlength="120"/></div>
+        <div class="field"><label class="f" for="ctPhone">Phone or e-mail</label><input id="ctPhone" maxlength="120"/></div>
+        <div class="field"><label class="f" for="ctUtil">Network</label><select id="ctUtil"><option value="water">Water</option><option value="sewer">Sewer</option><option value="storm">Storm</option><option value="electric">Electricity</option><option value="gas">Gas</option><option value="telecom">Telecom</option></select></div>
+        <div class="field"><label class="f" for="ctSource">Source</label><input id="ctSource" maxlength="200" placeholder="e.g. Department letter ref."/></div>
+        <button class="btn sm" type="submit">Add (unverified)</button></form>
+    </div>
+    <p class="tiny muted">New connections and contacts are stored as unverified. Only a recorded verification decision makes a contact operationally usable.</p>
+  </section>
+
+  <section class="card" style="margin-top:18px" id="analytics"><div class="card-h"><h3>Citywide analytics</h3><span class="badge">From current records</span></div>
+    <div class="grid g3" id="anaBody"><p class="small muted">Loading…</p></div></section>
 
   <div class="section-title"><h2>Legacy point-asset registry</h2></div>
   <section class="card">

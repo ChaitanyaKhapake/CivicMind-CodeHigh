@@ -70,6 +70,21 @@ instead of 403 where revealing existence would leak information.
 | GET | `/api/utility/import/jobs` | A | — | — |
 | POST | `/api/utility/records/verify` | A | human verification decision with a required note | activity |
 | GET | `/api/admin/activity` | A | audit log (no secrets are written to it) | — |
+| POST | `/api/voice` | C | WAV parsed on the server (PCM 16-bit, ≤ 15.5 s, ≤ 1.2 MB); private storage; 10 per 10 min | — |
+| GET | `/api/complaints/{id}/voice` | owner · O · A | private audio, `no-store` | — |
+| GET | `/api/voice/policy` | any | retention and provider disclosure | — |
+| GET | `/api/geo/reverse` | any | opt-in provider; service-area check before sending; cache; 1 req/s app-wide; 6/min per user | — |
+| POST | `/api/assistant/chat` | C | knowledge base + caller's OWN complaints only; AI text rejected if it adds numbers/links/e-mails; throttled | — |
+| GET | `/api/contractors` | O · A | contact details are staff-only | — |
+| POST | `/api/admin/contractors[/{id}/status]` | A | new contractors start unverified | activity |
+| GET/POST | `/api/incidents/{id}/work-orders`, `/api/work-orders[/{id}]` | O · A | one open order per plan; needs an approved plan | activity |
+| POST | `/api/work-orders/{id}/start|progress|evidence|submit|verify|cancel` | O · A | state checked in a write-locked transaction; submit needs an accepted AFTER photo; reject/cancel need a reason; accept completes the plan through workflow verification | activity, notification |
+| GET | `/api/work-orders/{id}/evidence/{eid}/photo` | O · A · linked C (AFTER photos of VERIFIED work only) | private store | — |
+| POST | `/api/admin/users/{id}` | A | role/department/active; role or access change revokes tokens; cannot demote yourself | activity |
+| GET/POST | `/api/admin/departments[/{id}/state]` | A | routing departments from config cannot be deactivated | activity |
+| GET | `/api/admin/analytics` | A | computed from records at request time | — |
+| POST | `/api/utility/connections`, `/api/utility/contacts`, `/api/utility/assets/{id}/status` | A | stored unverified; same-network connections only; duplicates refused | activity |
+| POST | `/api/utility/import/rollback` | A | typed `ROLLBACK`; refused if anything depends on the imported records | activity |
 
 ## TinyFish (public data-source discovery)
 

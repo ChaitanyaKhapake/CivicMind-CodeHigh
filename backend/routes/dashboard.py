@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 
 from auth import require_officer, require_citizen
 from database import query, parse_ts, utcnow
-from services import clustering
+from services import clustering, workorders as wo_svc
 from routes.common import safe_json
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -28,6 +28,9 @@ DEFINITIONS = {
     "resolution_rate": "Resolved complaints ÷ all non-rejected complaints. Null when there are none.",
     "median_resolution_hours": "Median hours from submission to resolution, resolved complaints only.",
     "reporting_citizens": "Distinct citizens with at least one open complaint.",
+    "overdue_work_orders": "Assigned or in-progress work orders past their estimated completion.",
+    "awaiting_verification": "Work orders reported complete and waiting for an officer's review.",
+    "open_work_orders": "Work orders assigned or in progress.",
 }
 _last_refresh = [0.0]
 
@@ -89,6 +92,9 @@ def officer_dashboard(user: dict = Depends(require_officer)):
             "median_resolution_hours": median,
             "reporting_citizens": _c(f"SELECT COUNT(DISTINCT user_id) c FROM complaints WHERE {OPEN_C}"),
             "synthetic_complaints": _c("SELECT COUNT(*) c FROM complaints WHERE is_synthetic=1"),
+            "overdue_work_orders": wo_svc.overdue_count(),
+            "awaiting_verification": _c("SELECT COUNT(*) c FROM work_orders WHERE status='awaiting_verification'"),
+            "open_work_orders": _c("SELECT COUNT(*) c FROM work_orders WHERE status IN ('assigned','in_progress')"),
         },
         "definitions": DEFINITIONS,
         "recent_reports": _recent_reports(),

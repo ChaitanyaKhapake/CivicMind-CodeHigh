@@ -24,11 +24,11 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 import config  # noqa: E402
 from config import FRONTEND_DIR, CITY_NAME, CITY_CENTER, CORS_ORIGINS, MAX_REQUEST_BYTES  # noqa: E402
 from database import init_db, query, is_demo_db  # noqa: E402
-from services import bootstrap, ai  # noqa: E402
+from services import bootstrap, ai, voice  # noqa: E402
 from services.tinyfish import provider_status  # noqa: E402
 from routes import (auth_routes, complaints, incidents, actions, dashboard, admin,  # noqa: E402
                     realtime, config_routes, infrastructure, data_sources, assistant, coordination,
-                    utility_network)
+                    utility_network, workorders, voice_geo)
 
 log = logging.getLogger("civicmind")
 
@@ -51,6 +51,7 @@ logging.getLogger("uvicorn.access").addFilter(_RedactTokens())
 async def lifespan(_app):
     init_db()
     result = bootstrap.bootstrap()
+    voice.purge()  # retention policy for voice recordings
     print(f"[CivicMind] Database: {config.DB_PATH}{'  (DEMO database)' if is_demo_db() else ''}")
     print(f"[CivicMind] Bootstrap: {result}")
     print("[CivicMind] AI engine: " + (f"Sarvam AI ({ai.SARVAM_CHAT_MODEL}) with rule-based fallback"
@@ -74,14 +75,14 @@ CSP = ("default-src 'self'; "
        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
        "font-src 'self' https://fonts.gstatic.com; "
        "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://unpkg.com; "
-       "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
+       "media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
 SECURITY_HEADERS = [
     (b"x-content-type-options", b"nosniff"),
     (b"x-frame-options", b"DENY"),
     # OpenStreetMap refuses tile requests without a Referer; send only the origin
     # (never paths or query strings) to other sites.
     (b"referrer-policy", b"strict-origin-when-cross-origin"),
-    (b"permissions-policy", b"geolocation=(self), camera=(), microphone=()"),
+    (b"permissions-policy", b"geolocation=(self), camera=(self), microphone=(self)"),
     (b"content-security-policy", CSP.encode()),
 ]
 
@@ -182,7 +183,7 @@ def health():
 
 
 for r in (config_routes, auth_routes, complaints, incidents, actions, dashboard, admin,
-          realtime, infrastructure, data_sources, assistant, coordination, utility_network):
+          realtime, infrastructure, data_sources, assistant, coordination, utility_network, workorders, voice_geo):
     app.include_router(r.router)
 
 # Short portal entry points. They only pick a page; every API call behind the

@@ -19,7 +19,135 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAll();
 });
 
-function loadAll() { loadStats(); loadUsers(); loadConfig(); loadComplaints(); loadResolutions(); loadUtility(); loadJobs(); loadFindings(); loadAudit(); }
+function loadAll() { loadStats(); loadUsers(); loadConfig(); loadComplaints(); loadResolutions(); loadUtility(); loadJobs(); loadFindings(); loadAudit();
+  loadDepartments(); loadContractors(); loadAnalytics(); }
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (!user) return;
+  $('usersTable').addEventListener('click', userAction);
+  $('deptForm').addEventListener('submit', addDepartment);
+  $('deptTable').addEventListener('click', toggleDepartment);
+  $('conForm').addEventListener('submit', addContractor);
+  $('conList').addEventListener('click', contractorAction);
+  $('uiJobs').addEventListener('click', rollbackImport);
+  $('regConn').addEventListener('submit', (e) => adminForm(e, '/api/utility/connections', {
+    from_asset_id: $('rcFrom').value.trim(), to_asset_id: $('rcTo').value.trim(), direction: $('rcDir').value,
+    connection_type: 'feeds', notes: $('rcNote').value.trim() }, 'Connection recorded as unverified', [loadUtility, loadAudit]));
+  $('regVerify').addEventListener('submit', (e) => adminForm(e, '/api/utility/records/verify', {
+    kind: $('rvKind').value, id: $('rvId').value.trim(), status: $('rvStatus').value, note: $('rvNote').value.trim() },
+    'Verification decision recorded', [loadUtility, loadFindings, loadAudit]));
+  $('regContact').addEventListener('submit', (e) => {
+    const v = $('ctPhone').value.trim();
+    adminForm(e, '/api/utility/contacts', { organization: $('ctOrg').value.trim(), role: $('ctRole').value.trim(),
+      utility_type: $('ctUtil').value, source_note: $('ctSource').value.trim(), ...(v.includes('@') ? { email: v } : { phone: v }) },
+      'Contact added as unverified', [loadAudit]);
+  });
+});
+
+async function adminForm(e, path, body, okMsg, reloads) {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  await CM.busy(btn, '…', async () => {
+    try { await CM.api(path, { method: 'POST', body }); CM.toast(okMsg, 'ok'); e.target.reset(); (reloads || []).forEach(f => f()); }
+    catch (ex) { CM.fail(ex); }
+  });
+}
+
+/* ---------- users: role / department / active (server enforces; role change signs the user out) ---------- */
+async function userAction(e) {
+  const b = e.target.closest('[data-uid]');
+  if (!b) return;
+  const id = Number(b.dataset.uid), row = b.closest('tr');
+  const body = { role: row.querySelector('[data-f="role"]').value, department: row.querySelector('[data-f="dept"]').value || '',
+                 is_active: row.querySelector('[data-f="active"]').checked };
+  if (!confirm(`Save changes for this user? Changing role or access signs them out everywhere.`)) return;
+  try { await CM.api(`/api/admin/users/${id}`, { method: 'POST', body }); CM.toast('User updated', 'ok'); loadUsers(); loadAudit(); }
+  catch (ex) { CM.fail(ex); }
+}
+
+let DEPTS = [];
+async function loadDepartments() {
+  try {
+    DEPTS = await CM.api('/api/admin/departments');
+    document.querySelector('#deptTable tbody').innerHTML = DEPTS.map(d => `<tr class="static">
+      <td class="small"><strong>${CM.esc(d.name)}</strong>${d.in_config ? ' <span class="tiny muted">(routing)</span>' : ''}</td>
+      <td class="small">${CM.esc(d.officers)}</td>
+      <td><span class="badge ${d.is_active ? 'low' : 'pending'}">${d.is_active ? 'Active' : 'Inactive'}</span></td>
+      <td>${d.in_config ? '' : `<button class="link-btn tiny" data-did="${Number(d.id)}" data-active="${d.is_active ? 0 : 1}">${d.is_active ? 'Deactivate' : 'Activate'}</button>`}</td></tr>`).join('');
+    loadUsers();
+  } catch (e) { CM.fail(e); }
+}
+async function addDepartment(e) {
+  e.preventDefault();
+  const name = $('deptName').value.trim();
+  if (name.length < 3) return CM.toast('Department name must be at least 3 characters.', 'err');
+  try { await CM.api('/api/admin/departments', { method: 'POST', body: { name } }); $('deptName').value = ''; CM.toast('Department added', 'ok'); loadDepartments(); loadConfig(); }
+  catch (ex) { CM.fail(ex); }
+}
+async function toggleDepartment(e) {
+  const b = e.target.closest('[data-did]');
+  if (!b) return;
+  try { await CM.api(`/api/admin/departments/${b.dataset.did}/state`, { method: 'POST', body: { is_active: b.dataset.active === '1' } }); loadDepartments(); }
+  catch (ex) { CM.fail(ex); }
+}
+
+/* ---------- contractors ---------- */
+async function loadContractors() {
+  try {
+    const rows = await CM.api('/api/contractors');
+    $('conList').innerHTML = rows.map(c => `<div class="contact ${c.is_synthetic ? 'warn' : c.verification_status === 'verified' ? 'ok' : ''}">
+        <div class="row spread wrap-row"><strong class="small">${CM.esc(c.name)}</strong><span class="tiny muted">${CM.esc(c.contractor_code)}</span></div>
+        <div class="tiny">${CM.esc(c.department || '—')} · ${CM.esc(c.contact_person || '')} · ${CM.esc(c.phone || c.email || 'no contact')}</div>
+        <div class="tiny"><span class="badge ${c.is_synthetic ? 'synthetic' : c.verification_status === 'verified' ? 'low' : 'pending'}">${CM.esc(c.label)}</span>
+          ${c.is_active ? '' : '<span class="badge pending">Inactive</span>'}
+          <button class="link-btn tiny" data-cid="${Number(c.id)}" data-op="verify">Mark verified</button> ·
+          <button class="link-btn tiny" data-cid="${Number(c.id)}" data-op="${c.is_active ? 'deactivate' : 'activate'}">${c.is_active ? 'Deactivate' : 'Activate'}</button></div></div>`).join('')
+      || '<p class="small muted">No contractors registered.</p>';
+  } catch (e) { CM.fail(e); }
+}
+async function addContractor(e) {
+  e.preventDefault();
+  const body = { contractor_code: $('conCode').value.trim(), name: $('conName').value.trim(), department: $('conDept').value.trim() || null,
+    contact_person: $('conPerson').value.trim() || null, phone: $('conPhone').value.trim() || null,
+    office_address: $('conAddr').value.trim() || null, is_synthetic: $('conSynthetic').checked };
+  try { await CM.api('/api/admin/contractors', { method: 'POST', body }); $('conForm').reset(); CM.toast('Contractor registered (unverified)', 'ok'); loadContractors(); loadAudit(); }
+  catch (ex) { CM.fail(ex); }
+}
+async function contractorAction(e) {
+  const b = e.target.closest('[data-cid]');
+  if (!b) return;
+  const note = prompt('Note for the audit log (5+ characters):');
+  if (!note) return;
+  const body = { note, ...(b.dataset.op === 'verify' ? { verification_status: 'verified' } : { is_active: b.dataset.op === 'activate' }) };
+  try { await CM.api(`/api/admin/contractors/${b.dataset.cid}/status`, { method: 'POST', body }); loadContractors(); loadAudit(); }
+  catch (ex) { CM.fail(ex); }
+}
+
+/* ---------- import rollback ---------- */
+async function rollbackImport(e) {
+  const b = e.target.closest('[data-rollback]');
+  if (!b) return;
+  const typed = prompt(`Remove every record created by ${b.dataset.rollback}? This is refused if anything now depends on them. Type ROLLBACK to confirm.`);
+  if (typed !== 'ROLLBACK') return;
+  try {
+    const r = await CM.api('/api/utility/import/rollback', { method: 'POST', body: { job_code: b.dataset.rollback, confirm: 'ROLLBACK' } });
+    CM.toast(`Rolled back: ${r.removed.assets} asset(s), ${r.removed.connections} connection(s)`, 'ok'); loadJobs(); loadUtility(); loadAudit();
+  } catch (ex) { CM.fail(ex); }
+}
+
+/* ---------- analytics (computed from records) ---------- */
+async function loadAnalytics() {
+  try {
+    const a = await CM.api('/api/admin/analytics');
+    const tbl = (title, rows, cols) => `<div><h4 style="margin:0 0 6px">${CM.esc(title)}</h4>${rows.length ? `<table class="table"><tbody>${rows.map(r =>
+      `<tr class="static">${cols.map(c => `<td class="small">${CM.esc(r[c] ?? 0)}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '<p class="small muted">No records.</p>'}</div>`;
+    $('anaBody').innerHTML = tbl('Reports by category (total · resolved)', a.complaints_by_category, ['category', 'c', 'resolved'])
+      + tbl('Reports by ward (total · open)', a.complaints_by_ward, ['ward', 'c', 'open'])
+      + tbl('Work orders by status', a.work_orders_by_status, ['status', 'c'])
+      + (a.repeat_assets.length ? tbl('Utility assets linked to 2+ incidents', a.repeat_assets, ['asset_id', 'name', 'incidents']) : '')
+      + `<p class="tiny muted">${CM.esc(a.definition)}</p>`;
+  } catch (e) { CM.fail(e); }
+}
 
 /* ---------- utility network data ---------- */
 async function loadUtility() {
@@ -106,7 +234,8 @@ async function loadJobs() {
       return `<tr class="static"><td class="small"><strong>${CM.esc(j.job_code)}</strong><div class="tiny muted">${CM.esc(j.input_format)} · ${CM.esc(j.created_by_name || '')}</div></td>
         <td class="small">${CM.esc(j.source_meta.name || '—')}<div class="tiny muted">${CM.esc(CM.titleCase(j.source_meta.provenance_class || ''))}</div></td>
         <td class="small">${done ? `${CM.esc(done.assets)} assets · ${CM.esc(done.connections)} links` : `${CM.esc(s.assets.accepted)} / ${CM.esc(s.assets.received)} valid`}</td>
-        <td><span class="badge ${j.status === 'committed' ? 'resolved' : 'pending'}">${CM.esc(CM.titleCase(j.status))}</span></td>
+        <td><span class="badge ${j.status === 'committed' ? 'resolved' : 'pending'}">${CM.esc(CM.titleCase(j.status))}</span>
+          ${j.status === 'committed' ? `<div><button class="link-btn tiny" data-rollback="${CM.esc(j.job_code)}">Roll back</button></div>` : ''}</td>
         <td class="small muted">${CM.esc(CM.timeAgo(j.committed_at || j.created_at))}</td></tr>`;
     }).join('') || '<tr class="static"><td colspan="5" class="empty">No imports yet.</td></tr>';
   } catch (e) { CM.fail(e); }
@@ -163,14 +292,18 @@ async function loadStats() {
 async function loadUsers() {
   try {
     const rows = await CM.api('/api/admin/users');
+    const depts = DEPTS.filter(d => d.is_active).map(d => d.name);
     document.querySelector('#usersTable tbody').innerHTML = rows.map(u => `
       <tr class="static">
-        <td><strong>${CM.esc(u.name)}</strong></td>
+        <td><strong>${CM.esc(u.name)}</strong>${u.id === user.id ? ' <span class="tiny muted">(you)</span>' : ''}</td>
         <td class="small muted">${CM.esc(u.email)}</td>
-        <td><span class="badge ${u.role === 'admin' ? 'critical' : u.role === 'officer' ? 'active' : ''}">${CM.esc(CM.titleCase(u.role))}</span></td>
-        <td class="small">${CM.esc(u.department || '—')}</td>
-        <td class="small">${CM.esc(u.ward || '—')}</td>
-      </tr>`).join('') || '<tr class="static"><td colspan="5" class="empty">No users.</td></tr>';
+        <td><select class="sm-select" data-f="role" aria-label="Role">${['citizen', 'officer', 'admin'].map(r =>
+          `<option value="${r}" ${u.role === r ? 'selected' : ''}>${CM.titleCase(r)}</option>`).join('')}</select></td>
+        <td><select class="sm-select" data-f="dept" aria-label="Department"><option value="">—</option>${depts.map(d =>
+          `<option ${u.department === d ? 'selected' : ''}>${CM.esc(d)}</option>`).join('')}</select></td>
+        <td><input type="checkbox" data-f="active" aria-label="Active" ${u.is_active ? 'checked' : ''} style="width:auto"/></td>
+        <td><button class="btn sm" data-uid="${Number(u.id)}">Save</button></td>
+      </tr>`).join('') || '<tr class="static"><td colspan="6" class="empty">No users.</td></tr>';
   } catch (e) { CM.fail(e); }
 }
 

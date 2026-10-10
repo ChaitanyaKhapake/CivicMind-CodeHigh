@@ -28,7 +28,7 @@ class ResetIn(BaseModel):
 
 @router.get("/users")
 def users():
-    return query("""SELECT id, name, email, role, department, ward, created_at
+    return query("""SELECT id, name, email, role, department, ward, is_active, created_at
                     FROM users ORDER BY role, name""")
 
 
@@ -38,7 +38,8 @@ def add_user(body: UserIn, admin: dict = Depends(require_admin)):
     validate_password(body.password)
     if body.role not in ROLES:
         raise HTTPException(422, f"Role must be one of: {', '.join(ROLES)}")
-    if body.department and body.department not in set(DEPARTMENT_MAP.values()):
+    if body.department and body.department not in {r["name"] for r in query(
+            "SELECT name FROM departments WHERE is_active=1")}:
         raise HTTPException(422, "Unknown department")
     if body.ward and WARDS and body.ward not in WARDS:
         raise HTTPException(422, "Unknown ward")
@@ -52,7 +53,8 @@ def add_user(body: UserIn, admin: dict = Depends(require_admin)):
 
 @router.get("/config")
 def config():
-    return {"categories": CATEGORIES, "departments": sorted(set(DEPARTMENT_MAP.values())),
+    return {"categories": CATEGORIES,
+            "departments": [r["name"] for r in query("SELECT name FROM departments WHERE is_active=1 ORDER BY name")],
             "roles": list(ROLES), "wards": sorted(WARDS), "read_only": True,
             "note": "Edit data/civicmind_config.json and restart to change configuration."}
 
@@ -114,6 +116,114 @@ def all_resolutions():
         r["proof_check"] = evidence.public_check(safe_json(r.get("proof_check")))
     rows.sort(key=lambda r: r.get("verified_at") or "", reverse=True)
     return rows
+
+
+class UserUpdateIn(BaseModel):
+    role: str | None = Field(default=None, max_length=10)
+    department: str | None = Field(default=None, max_length=120)
+    ward: str | None = Field(default=None, max_length=60)
+    is_active: bool | None = None
+
+
+@router.post("/users/{user_id}")
+def update_user(user_id: int, body: UserUpdateIn, admin: dict = Depends(require_admin)):
+    """Change role, department, ward or active state. Role/active changes revoke the user's existing tokens."""
+    target = query("SELECT id, name, role, is_active FROM users WHERE id=?", (user_id,), one=True)
+    if not target:
+        raise HTTPException(404, "User not found")
+    if body.role is not None and body.role not in ROLES:
+        raise HTTPException(422, f"Role must be one of: {', '.join(ROLES)}")
+    if user_id == admin["id"] and ((body.role and body.role != "admin") or body.is_active is False):
+        raise HTTPException(409, "You cannot remove your own admin access.")
+    active_depts = {r["name"] for r in query("SELECT name FROM departments WHERE is_active=1")}
+    if body.department and body.department not in active_depts:
+        raise HTTPException(422, "Unknown or inactive department")
+    if body.ward and WARDS and body.ward not in WARDS:
+        raise HTTPException(422, "Unknown ward")
+    sets, params, changes = [], [], []
+    for col in ("role", "department", "ward"):
+        val = getattr(body, col)
+        if val is not None:
+            sets.append(f"{col}=?")
+            params.append(val or None)
+            changes.append(f"{col}={val or '—'}")
+    if body.is_active is not None:
+        sets.append("is_active=?")
+        params.append(int(body.is_active))
+        changes.append(f"active={body.is_active}")
+    if not sets:
+        raise HTTPException(422, "Nothing to change")
+    if body.role is not None or body.is_active is not None:
+        sets.append("token_version = token_version + 1")
+    execute(f"UPDATE users SET {', '.join(sets)} WHERE id=?", (*params, user_id))
+    execute("INSERT INTO activity (actor, actor_id, action, detail) VALUES (?,?,?,?)",
+            (admin["name"], admin["id"], "user_updated", f"User #{user_id}: {', '.join(changes)}"))
+    return query("SELECT id, name, email, role, department, ward, is_active FROM users WHERE id=?", (user_id,), one=True)
+
+
+@router.get("/departments")
+def departments():
+    rows = query("SELECT * FROM departments ORDER BY is_active DESC, name")
+    for r in rows:
+        r["officers"] = query("SELECT COUNT(*) c FROM users WHERE department=? AND role IN ('officer','admin')",
+                              (r["name"],), one=True)["c"]
+        r["in_config"] = r["name"] in set(DEPARTMENT_MAP.values())
+    return rows
+
+
+class DepartmentIn(BaseModel):
+    name: str = Field(min_length=3, max_length=120)
+    description: str | None = Field(default=None, max_length=300)
+    contact_role: str | None = Field(default=None, max_length=120)
+
+
+@router.post("/departments")
+def add_department(body: DepartmentIn, admin: dict = Depends(require_admin)):
+    name = " ".join(body.name.split())
+    if query("SELECT 1 FROM departments WHERE lower(name)=lower(?)", (name,), one=True):
+        raise HTTPException(409, "A department with that name exists")
+    execute("INSERT INTO departments (name, description, contact_role) VALUES (?,?,?)",
+            (name, (body.description or "").strip() or None, (body.contact_role or "").strip() or None))
+    execute("INSERT INTO activity (actor, actor_id, action, detail) VALUES (?,?,?,?)",
+            (admin["name"], admin["id"], "department_created", f"Department '{name}' created"))
+    return {"ok": True}
+
+
+class DepartmentStateIn(BaseModel):
+    is_active: bool
+
+
+@router.post("/departments/{dept_id}/state")
+def department_state(dept_id: int, body: DepartmentStateIn, admin: dict = Depends(require_admin)):
+    d = query("SELECT name FROM departments WHERE id=?", (dept_id,), one=True)
+    if not d:
+        raise HTTPException(404, "Department not found")
+    if not body.is_active and d["name"] in set(DEPARTMENT_MAP.values()):
+        raise HTTPException(409, "This department is used for complaint routing in the configuration; it cannot be "
+                                 "deactivated here.")
+    execute("UPDATE departments SET is_active=? WHERE id=?", (int(body.is_active), dept_id))
+    execute("INSERT INTO activity (actor, actor_id, action, detail) VALUES (?,?,?,?)",
+            (admin["name"], admin["id"], "department_updated",
+             f"Department '{d['name']}' {'activated' if body.is_active else 'deactivated'}"))
+    return {"ok": True}
+
+
+@router.get("/analytics")
+def analytics():
+    """Citywide figures computed from records at request time (nothing is stored or estimated)."""
+    return {
+        "complaints_by_category": query("""SELECT category, COUNT(*) c, SUM(status='resolved') resolved
+                                           FROM complaints GROUP BY category ORDER BY c DESC"""),
+        "complaints_by_ward": query("""SELECT COALESCE(ward,'Unmapped') ward, COUNT(*) c,
+                                       SUM(status NOT IN ('resolved','rejected')) open FROM complaints
+                                       GROUP BY ward ORDER BY c DESC LIMIT 20"""),
+        "work_orders_by_status": query("SELECT status, COUNT(*) c FROM work_orders GROUP BY status"),
+        "repeat_assets": query("""SELECT a.asset_id, a.name, COUNT(DISTINCT iua.incident_id) incidents
+                                  FROM incident_utility_assets iua JOIN utility_assets a ON a.id=iua.asset_id
+                                  WHERE iua.status != 'rejected' GROUP BY a.id HAVING incidents >= 2
+                                  ORDER BY incidents DESC LIMIT 10"""),
+        "definition": "Counts of current records; repeat assets = utility assets linked to 2+ incidents.",
+    }
 
 
 @router.get("/activity")

@@ -516,6 +516,28 @@ ul.reasons li { margin: 1px 0; }
 #utilTypes input { width: auto; }
 .util-card .kv { gap: 10px; }
 
+/* citizen: voice, photo, review, chat */
+.voice-box { border: 1px dashed var(--line-2); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 10px; background: var(--surface-2); }
+.voice-box audio { width: 100%; margin: 8px 0 4px; }
+.rec-dot { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; font-weight: 700; color: var(--red); }
+.rec-dot .pulse { width: 10px; height: 10px; border-radius: 50%; background: var(--red); animation: recpulse 1s infinite; }
+@keyframes recpulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .rec-dot .pulse { animation: none; } }
+.photo-preview { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+.photo-preview img { width: 140px; height: 105px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+.review-panel { margin-top: 4px; border-color: var(--primary-100); }
+.chat-log { max-height: 280px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.chat-msg { display: flex; flex-direction: column; gap: 6px; max-width: 92%; }
+.chat-msg.me { align-self: flex-end; align-items: flex-end; }
+.chat-msg .bubble-text { padding: 8px 11px; border-radius: 12px; font-size: .84rem; white-space: pre-line; }
+.chat-msg.bot .bubble-text { background: var(--bg-2); }
+.chat-msg.me .bubble-text { background: var(--primary); color: #fff; }
+
+/* officer: work orders */
+.wo { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px; margin-top: 10px; }
+.wo.overdue { border-left: 4px solid var(--red); }
+.evidence-strip { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .steps { grid-template-columns: repeat(3,1fr); }

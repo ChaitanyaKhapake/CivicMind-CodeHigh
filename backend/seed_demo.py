@@ -131,7 +131,7 @@ def main():
     if args.reset:
         bootstrap.reset_data()
         with db() as conn:
-            conn.execute("DELETE FROM meta WHERE key IN ('demo_seeded', 'utility_demo_reports')")
+            conn.execute("DELETE FROM meta WHERE key IN ('demo_seeded', 'utility_demo_reports', 'workorder_demo')")
         print("Demo civic data cleared.")
 
     # --- accounts --------------------------------------------------------------
@@ -170,7 +170,8 @@ def main():
     if get_meta("demo_seeded") != "1":
         for i, (who, cat, text, lat, lng, hours, photo) in enumerate(REPORTS):
             u = citizens[who % len(citizens)]
-            res = intake.create(u, cat, text, lat, lng, image=_photo_data_url(1000 + i) if photo else None,
+            # A photo is mandatory for every report; all demo photos are synthetic noise images.
+            res = intake.create(u, cat, text, lat, lng, image=_photo_data_url(1000 + i),
                                 created_at=_ago(hours=hours), is_synthetic=True)
             print(f"  {res['public_id']}  {cat:22} incident={res['incident_id']}  asset="
                   f"{(res['asset_match'] or {}).get('asset_code')}")
@@ -186,11 +187,55 @@ def main():
         for who, text, lat, lng, hours in demo_data.LEAK_REPORTS:
             u = citizens[who % len(citizens)]
             lang = "mr" if any("ऀ" <= ch <= "ॿ" for ch in text) else "en"
-            res = intake.create(u, "Water Leakage", text, lat, lng, created_at=_ago(hours=hours),
-                                is_synthetic=True, language=lang)
+            res = intake.create(u, "Water Leakage", text, lat, lng, image=_photo_data_url(2000 + who),
+                                created_at=_ago(hours=hours), is_synthetic=True, language=lang)
             print(f"  {res['public_id']}  Water Leakage          incident={res['incident_id']}")
+            if lang == "mr":
+                # A synthetic transcript record (no audio file) to show how officers see voice notes.
+                with db() as conn:
+                    rid = conn.execute(
+                        """INSERT INTO voice_recordings (token, user_id, complaint_id, stored_name, mime, duration_s,
+                           sample_rate, bytes, language, detected_language, transcript, transcript_status,
+                           transcript_engine, created_at, linked_at)
+                           VALUES (?,?,?, NULL, 'audio/wav', 6.0, 16000, 0, 'mr', 'mr-IN', ?, 'transcribed',
+                           'synthetic_demo', ?, ?)""",
+                        (secrets.token_urlsafe(18), u["id"], res["id"], text, _ago(hours=hours), _ago(hours=hours))).lastrowid
+                    conn.execute("UPDATE complaints SET voice_recording_id=? WHERE id=?", (rid, res["id"]))
         with db() as conn:
             conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('utility_demo_reports', '1')")
+
+    # --- fictional contractor + a scheduled work order on the streetlight incident -------
+    with db() as conn:
+        conn.execute("""INSERT OR IGNORE INTO contractors (contractor_code, name, department, contact_person, contact_role,
+                        phone, office_address, verification_status, is_synthetic, created_at)
+                        VALUES ('CON-DEMO-01', 'Sahyadri Civil Works (FICTIONAL)', 'Water Supply Department',
+                        'Site supervisor (demo)', 'Supervisor', 'DEMO-ONLY · not a real number',
+                        'Fictional office, Pune (demo)', 'unverified', 1, ?)""", (_ago(days=1),))
+        conn.execute("""INSERT OR IGNORE INTO contractors (contractor_code, name, department, contact_person, contact_role,
+                        phone, office_address, verification_status, is_synthetic, created_at)
+                        VALUES ('CON-DEMO-02', 'Deccan Electricals (FICTIONAL)', 'Electrical Department',
+                        'Lineman lead (demo)', 'Team lead', 'DEMO-ONLY · not a real number',
+                        'Fictional office, Pune (demo)', 'unverified', 1, ?)""", (_ago(days=1),))
+    if get_meta("workorder_demo") != "1":
+        from services import actions as action_svc, workorders as wo_svc
+        officer = query("SELECT * FROM users WHERE role='officer' ORDER BY id LIMIT 1", one=True)
+        inc = query("""SELECT id FROM incidents WHERE category='Streetlight Failure' AND status != 'resolved'
+                       ORDER BY id LIMIT 1""", one=True)
+        if officer and inc:
+            act = query("SELECT id, status FROM actions WHERE incident_id=? ORDER BY id DESC LIMIT 1", (inc["id"],), one=True)
+            if act and act["status"] == "pending":
+                action_svc.approve_action(act["id"], officer)
+            con = query("SELECT id FROM contractors WHERE contractor_code='CON-DEMO-02'", one=True)
+            try:
+                wo = wo_svc.create(inc["id"], officer, {"task": "Replace the failed lamp unit and test the feeder pillar",
+                                                         "contractor_id": con["id"], "priority": "high",
+                                                         "est_start": _ago(hours=-2), "est_completion": _ago(hours=-30),
+                                                         "utility_asset_ids": ["TR-DEMO-01"]})
+                print(f"  {wo['public_id']}  work order for the streetlight incident (fictional contractor)")
+            except wo_svc.WorkOrderError as e:
+                print(f"  work order not created: {e.message}")
+        with db() as conn:
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('workorder_demo', '1')")
     print("Utility findings:", utility_findings.safe_scan())
     summary = risk.scan()
     sample = os.path.join(os.path.dirname(db_path), "sample_proof_photo.jpg")

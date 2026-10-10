@@ -14,9 +14,9 @@ connected to any municipal system**; demo data is fictional and labelled as such
 
 | Portal | Entry | For | Highlights |
 |---|---|---|---|
-| Citizen | `/citizen` → `citizen.html` | residents | report in EN/HI/MR with a review-first assistant, map pin, photo, private tracking code, status timeline in your language, notifications |
-| Officer | `/officer` → `dashboard.html`, `map.html`, `incident.html` | municipal staff | priority queue, live map with **utility layers**, asset panel with **network tracing**, isolation candidates, **Utility Copilot**, incident briefing, operator coordination, plans, evidence, verification |
-| Admin | `/admin` → `admin.html`, `data-sources.html` | administrators | users and roles, utility data overview, **GeoJSON/CSV import with preview → confirm**, TinyFish public-source discovery, findings, audit log |
+| Citizen | `/citizen` → `citizen.html` | residents | EN/HI/MR interface, **civic help chatbot**, **15-second voice description with editable transcript**, **mandatory photo** with preview, **"Use my current location"**, review-before-submit, private tracking code, status history, estimated / scheduled / actual completion, resolution photos |
+| Officer | `/officer` → `dashboard.html`, `map.html`, `incident.html` | municipal staff | priority queue, overdue / awaiting-verification metrics, live map with **utility layers**, **network tracing**, isolation candidates, **Utility Copilot**, incident briefing, operator coordination, **work orders with contractors, progress, before/after evidence and accept/reject verification**, voice transcripts |
+| Admin | `/admin` → `admin.html`, `data-sources.html` | administrators | users (role, department, access), departments, contractors, citywide analytics, utility registry (connections, contacts, status, verification), **GeoJSON/CSV import with preview → confirm → rollback**, TinyFish public-source discovery, findings, audit log |
 
 Sign-in sends each user to the portal of their **server-side** role. Pages re-check the role with the server, and
 every API call is authorised on the server regardless of which page is open.
@@ -115,13 +115,35 @@ imported as geometry automatically, and is at best `official_unverified`.
 3. Live check: Data sources → search *Pune Municipal Corporation / water supply network* → select → *Fetch
    selected* → open → approve → *Show import source metadata*. Results must be tagged **Live**, not Mock.
 
-## Multilingual reporting
+## Citizen reporting
 
-Citizens pick English, हिन्दी or मराठी (saved to their profile). The report form, progress steps, status names and
-"what happens next" follow the language. *Check my report* suggests a category, severity and follow-up questions
-(rule-based with Hindi/Marathi keywords, or Sarvam AI when configured) and — only with an AI provider — an English
-translation the citizen can edit. Suggestions are applied only by the citizen; the translation is stored separately
-and only if they tick that they reviewed it. Voice input is **not implemented**.
+- **Languages**: English, हिन्दी, मराठी (saved to the profile). Form labels, steps, statuses, "what happens next" and the
+  chatbot follow the language. New languages are added in `frontend/js/i18n.js` and `services/chatbot.py`.
+- **Chatbot** ("Ask CivicMind"): answers from a fixed help knowledge base and the citizen's *own* complaint statuses.
+  A described problem becomes a draft that the citizen reviews in the form; it never submits. If Sarvam is
+  configured it may rephrase answers, but text that adds phone numbers, links or e-mail addresses is discarded.
+- **Voice** (≤ 15 s): recorded in the browser as 16 kHz WAV, validated on the server (format and duration),
+  stored privately, transcribed by Sarvam speech-to-text (`saaras:v4`, `en-IN` / `hi-IN` / `mr-IN`). The
+  transcript is AI output, shown for editing and stored separately from the citizen's description. Audio is
+  deleted 90 days after resolution (unattached recordings after 24 h). Without a Sarvam key the recording is
+  kept and the citizen types the description.
+- **Photo**: mandatory (`require_issue_photo` in the config), JPEG/PNG/WebP ≤ 5 MB, content-validated, EXIF/GPS
+  removed, private.
+- **Location**: map pin, or "Use my current location" (browser permission; accuracy shown; pin adjustable).
+  An address suggestion appears only if reverse geocoding is enabled (`CIVICMIND_REVERSE_GEOCODER=nominatim`,
+  off by default because of the Nominatim usage policy); otherwise the citizen types a landmark.
+- **Review step** before submitting; the tracking code is shown only after the server saved the report.
+- **Tracking**: status history (citizen-safe labels, no internal notes), estimate shown as *estimated* (approved
+  plan's hours), *scheduled* (work-order date), *actual* (resolution time) or *pending* — never invented.
+
+## Work orders and contractors
+
+An approved plan can be issued as a work order to a contractor (admin-registered, unverified until checked) or an
+internal team, with estimated start/completion. Progress notes and estimate changes are recorded (citizens are
+notified of new schedules). Completion requires an accepted **after** photo (not the citizen's photo, not reused).
+The officer then **accepts** — which completes the plan and runs the existing workflow verification and recurrence
+check — or **rejects** with a reason, which returns the work to *in progress*. Nothing in the history is deleted;
+reopened incidents keep earlier resolutions. Contractor contact details are never shown to citizens.
 
 ## Tests
 
@@ -147,10 +169,15 @@ There is no automated real-browser test; the browser walkthrough below was done 
    downstream, both on verified paths; the loop link `UC-DEMO-13` has unknown direction and is flagged.
    Ask the Copilot "What is the upstream source?". Click `WM-DEMO-102` to show a branch with **no recorded source**.
 5. Back on the incident → *Utility operator coordination*: record *operator contacted* → *isolation confirmed by
-   operator* (reference required) → approve the plan → *crew dispatched* → start → complete with
-   `data/demo/sample_proof_photo.jpg` → the incident is verified and the timeline updated.
-6. Sign in as the demo **admin** → utility data overview, findings, audit log → *Import utility records* preview
-   (duplicates and missing relationships are reported) → Data sources (TinyFish; Mock unless a key is set).
+   operator* (reference required) → approve the plan → *Issue a work order* to the fictional contractor
+   *Sahyadri Civil Works (FICTIONAL)* with an estimated completion → *crew dispatched* → *Mark started* → upload an
+   **after** photo (`data/demo/sample_proof_photo.jpg`) → *Submit for verification* → *Reject* once with a reason,
+   upload another photo, submit again → *Accept* → the incident is verified and the timeline shows every step.
+6. As the citizen: the report shows the history, the scheduled/actual completion and the resolution photo.
+   The streetlight incident already has a seeded work order (`WO-00001`) to show a scheduled completion.
+7. Sign in as the demo **admin** → users/departments/contractors, analytics, utility data overview, findings,
+   audit log → *Import utility records* preview (duplicates and missing relationships are reported) → roll back an
+   import → Data sources (TinyFish; Mock unless a key is set).
 
 Fallbacks: without Sarvam everything is rule/record-based; without TinyFish the page states it is not configured
 (or use mock mode); if map tiles fail, markers and panels still work; uploads that fail checks are rejected with
@@ -168,7 +195,11 @@ traces; API keys only on the server. Rotate any credential that was ever shared 
 - Ward assignment uses the nearest ward centre, not official boundaries.
 - Utility data in the demo is synthetic; no official GIS dataset is connected.
 - The Copilot waits for Sarvam (up to its 25 s timeout) before falling back to the record-based answer.
-- Voice input, Shapefile/KML import and PDF extraction are not implemented.
+- Speech-to-text accuracy has not been measured; transcripts must be checked by the citizen.
+- Address autofill is off unless deliberately enabled; then it depends on the public Nominatim service.
+- Shapefile/KML import, PDF extraction and editable categories / rule thresholds are not implemented
+  (configuration stays in `data/civicmind_config.json`).
+- Officers are not yet restricted to their own department's incidents (departments are recorded, not enforced).
 - In-process throttles and caches assume a single server instance; SQLite only.
 - Hindi/Marathi interface strings should be reviewed by native speakers.
 - `CivicMind_Deployment_Guide.docx` describes an older version.

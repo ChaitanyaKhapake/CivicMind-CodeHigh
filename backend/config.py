@@ -238,6 +238,29 @@ TINYFISH_RESOLVE_DNS = _env_bool("TINYFISH_RESOLVE_DNS", True)
 # Languages offered to civilians (the AI provider may support fewer — see services/assistant.py).
 CIVILIAN_LANGUAGES = {"en": "English", "hi": "हिन्दी (Hindi)", "mr": "मराठी (Marathi)"}
 
+# ---------------------------------------------------------------------------
+# Voice descriptions (speech-to-text via Sarvam; audio kept private)
+# ---------------------------------------------------------------------------
+SARVAM_STT_MODEL = _env("SARVAM_STT_MODEL", "saaras:v4").strip()
+SARVAM_STT_TIMEOUT = float(_env("SARVAM_STT_TIMEOUT", "30"))
+VOICE_MAX_SECONDS = 15.0
+VOICE_MAX_BYTES = _env_int("CIVICMIND_VOICE_MAX_BYTES", 1_200_000, 100_000, 5_000_000)
+# Unlinked recordings are deleted after this many hours; linked audio after the
+# complaint has been resolved for VOICE_RETENTION_DAYS (the transcript is kept).
+VOICE_UNLINKED_TTL_HOURS = _env_int("CIVICMIND_VOICE_UNLINKED_TTL_HOURS", 24, 1, 168)
+VOICE_RETENTION_DAYS = _env_int("CIVICMIND_VOICE_RETENTION_DAYS", 90, 1, 3650)
+
+# ---------------------------------------------------------------------------
+# Reverse geocoding for "Use my current location". OFF unless deliberately
+# enabled. The public Nominatim service has a usage policy (max 1 request/s
+# per application, identifying User-Agent, caching, attribution, explicit
+# user action only): https://operations.osmfoundation.org/policies/nominatim/
+# ---------------------------------------------------------------------------
+REVERSE_GEOCODER = _env("CIVICMIND_REVERSE_GEOCODER", "none").strip().lower()   # none | nominatim
+REVERSE_GEOCODER_URL = _env("CIVICMIND_REVERSE_GEOCODER_URL", "https://nominatim.openstreetmap.org/reverse").strip()
+REVERSE_GEOCODER_USER_AGENT = _env("CIVICMIND_REVERSE_GEOCODER_USER_AGENT",
+                                   "CivicMind/0.5 (Build with Bharat 4.0 hackathon prototype)").strip()
+
 # Role -> home dashboard
 ROLE_HOME = {
     "citizen": "/citizen.html",

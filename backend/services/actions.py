@@ -186,25 +186,36 @@ def start_action(action_id, actor):
     return query("SELECT * FROM actions WHERE id=?", (action_id,), one=True)
 
 
-def complete_action(action_id, actor, notes, proof_image):
+def complete_action(action_id, actor, notes, proof_image, accepted_proof=None, on_complete=None):
+    """Complete a plan with a proof photo.
+
+    `accepted_proof` is a photo already validated and stored as work-order
+    evidence ({stored_name, image_hash, check}); it is used when an officer
+    accepts a work order. `on_complete(conn)` runs inside the same transaction."""
     notes = (notes or "").strip()[:500]
     pre = query("SELECT a.status, a.incident_id FROM actions a WHERE a.id=?", (action_id,), one=True)
     if not pre:
         raise WorkflowError("Action not found", 404)
     _require(pre, "in_progress")
-    if not proof_image:
-        raise WorkflowError("A proof-of-work photo is required to complete this plan.", 422)
-    issue_hashes = [r["image_hash"] for r in query(
-        "SELECT image_hash FROM complaints WHERE incident_id=? AND image_hash IS NOT NULL", (pre["incident_id"],))]
-    inc_cat = query("SELECT category FROM incidents WHERE id=?", (pre["incident_id"],), one=True)["category"]
-    try:
-        proof = evidence.process(proof_image, "resolution", inc_cat, issue_hashes=issue_hashes)
-    except evidence.EvidenceError as e:
-        raise WorkflowError(e.message, e.status)
-    if proof["verdict"] == "rejected":
-        raise WorkflowError("The proof photo did not pass the automated checks.", 422,
-                            {"reasons": proof["reasons"]})
-    check = json.dumps({k: v for k, v in proof.items() if k != "stored_name"})
+    if accepted_proof:
+        proof = {"stored_name": accepted_proof["stored_name"], "image_hash": accepted_proof["image_hash"]}
+        check = accepted_proof["check"]
+        if not evidence.resolve_path(proof["stored_name"]):
+            raise WorkflowError("The accepted completion photo is no longer on file.", 409)
+    else:
+        if not proof_image:
+            raise WorkflowError("A proof-of-work photo is required to complete this plan.", 422)
+        issue_hashes = [r["image_hash"] for r in query(
+            "SELECT image_hash FROM complaints WHERE incident_id=? AND image_hash IS NOT NULL", (pre["incident_id"],))]
+        inc_cat = query("SELECT category FROM incidents WHERE id=?", (pre["incident_id"],), one=True)["category"]
+        try:
+            proof = evidence.process(proof_image, "resolution", inc_cat, issue_hashes=issue_hashes)
+        except evidence.EvidenceError as e:
+            raise WorkflowError(e.message, e.status)
+        if proof["verdict"] == "rejected":
+            raise WorkflowError("The proof photo did not pass the automated checks.", 422,
+                                {"reasons": proof["reasons"]})
+        check = json.dumps({k: v for k, v in proof.items() if k != "stored_name"})
     try:
         with db(immediate=True) as conn:
             action, inc = _load_action(conn, action_id)
@@ -222,9 +233,12 @@ def complete_action(action_id, actor, notes, proof_image):
                     "notes": f"{inc['public_id']}: {action['action_text']}"[:500],
                     "data_source": "CivicMind workflow", "is_synthetic": 0,
                 }, recorded_by=actor["id"], action_id=action_id)
+            if on_complete:
+                on_complete(conn)
             result = _verify(conn, inc["id"], actor, "workflow_completion")
     except Exception:
-        evidence.discard(proof["stored_name"])
+        if not accepted_proof:  # work-order evidence stays on file with its own record
+            evidence.discard(proof["stored_name"])
         raise
     risk.safe_scan()
     return result

@@ -93,13 +93,23 @@ def make_user(client):
     return _make
 
 
-def file_complaint(actor, category="Pothole", lat=None, lng=None, text=None, image=None):
+_photo_seed = [50_000]
+
+
+def fresh_photo():
+    """A unique, valid issue photo (a photo is mandatory for every complaint)."""
+    _photo_seed[0] += 1
+    return image_data_url(_photo_seed[0], size=(320, 240))
+
+
+def file_complaint(actor, category="Pothole", lat=None, lng=None, text=None, image=None, **extra):
     lat = PUNE[0] if lat is None else lat
     lng = PUNE[1] if lng is None else lng
     body = {"category": category, "latitude": lat, "longitude": lng,
-            "description": text or f"There is a {category.lower()} problem here, please fix it soon."}
-    if image:
-        body["image"] = image
+            "description": text or f"There is a {category.lower()} problem here, please fix it soon.",
+            "image": image if image is not None else fresh_photo(), **extra}
+    if body["image"] is False:  # explicit "no photo" for policy tests
+        del body["image"]
     return actor.post("/api/complaints", json=body)
 
 

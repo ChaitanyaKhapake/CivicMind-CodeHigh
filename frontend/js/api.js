@@ -75,10 +75,10 @@ const CM = (() => {
       img.alt = 'Photo unavailable'; img.classList.add('img-missing');
     }
   }
-  /** Hydrate every <img data-auth-src="..."> under root. */
+  /** Hydrate every <img data-auth-src="..."> and <audio data-auth-src="..."> under root (private media). */
   function hydrateImages(root = document) {
-    root.querySelectorAll('img[data-auth-src]').forEach(img => {
-      const u = img.getAttribute('data-auth-src'); img.removeAttribute('data-auth-src'); authImage(img, u);
+    root.querySelectorAll('img[data-auth-src], audio[data-auth-src]').forEach(el => {
+      const u = el.getAttribute('data-auth-src'); el.removeAttribute('data-auth-src'); authImage(el, u);
     });
   }
 

@@ -9,7 +9,7 @@ import requests
 from database import query
 from services import ai, assistant
 from routes import assistant as assistant_routes
-from conftest import PUNE
+from conftest import PUNE, fresh_photo
 
 HI_LEAK = "हमारी गली में पानी की पाइप लीक हो रही है, बहुत पानी बह रहा है"
 MR_GARBAGE = "आमच्या  रस्त्यावर खूप कचरा साचला आहे\nआणि घाण वास येत आहे"
@@ -119,7 +119,7 @@ def test_submission_stores_original_and_translation_separately(client, make_user
     citizen, officer = make_user("citizen"), make_user("officer")
     body = {"category": "Garbage Accumulation", "description": MR_GARBAGE, "latitude": PUNE[0],
             "longitude": PUNE[1], "language": "mr", "translation_en": "Lots of garbage has piled up on our road.",
-            "assistant_engine": "rules"}
+            "assistant_engine": "rules", "image": fresh_photo()}
     r = citizen.post("/api/complaints", json=body)
     assert r.status_code == 200, r.text
     out = r.json()
@@ -138,15 +138,15 @@ def test_submission_language_validation(client, make_user):
     citizen = make_user("citizen")
     base = {"category": "Pothole", "description": "Big pothole near the bus stop on the main road",
             "latitude": PUNE[0], "longitude": PUNE[1]}
-    r = citizen.post("/api/complaints", json=base | {"language": "fr"})
+    r = citizen.post("/api/complaints", json=base | {"language": "fr", "image": fresh_photo()})
     assert r.status_code == 422
-    r = citizen.post("/api/complaints", json=base | {"assistant_engine": "gpt"})
+    r = citizen.post("/api/complaints", json=base | {"assistant_engine": "gpt", "image": fresh_photo()})
     assert r.status_code == 422
-    r = citizen.post("/api/complaints", json=base | {"language": "en", "translation_en": "Same text"})
+    r = citizen.post("/api/complaints", json=base | {"language": "en", "translation_en": "Same text", "image": fresh_photo()})
     assert r.status_code == 200
     row = query("SELECT * FROM complaints WHERE id=?", (r.json()["id"],), one=True)
     assert row["description_translation_en"] is None and row["original_language"] == "en"
-    r = citizen.post("/api/complaints", json=base | {"description": "Another pothole report without language data"})
+    r = citizen.post("/api/complaints", json=base | {"description": "Another pothole report without language data", "image": fresh_photo()})
     assert r.status_code == 200  # language fields stay optional
 
 

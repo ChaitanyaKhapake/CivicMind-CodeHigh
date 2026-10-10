@@ -5,7 +5,7 @@ import json
 
 from config import CATEGORIES, REQUIRE_ISSUE_PHOTO, CITY_NAME, CIVILIAN_LANGUAGES
 from database import query, db, now, new_tracking_code, insert_with_public_id
-from services import ai, geo, evidence, clustering, risk, assets as asset_svc
+from services import ai, geo, evidence, clustering, risk, voice, assets as asset_svc
 from services.assistant import detect_language
 
 ASSISTANT_ENGINES = ("sarvam", "rules")
@@ -46,11 +46,25 @@ def validate_language(language, translation_en, assistant_engine):
     return translation_en
 
 
+LOCATION_SOURCES = ("map", "device", "device_adjusted")
+
+
 def create(user, category, description, latitude, longitude, address=None, image=None,
            created_at=None, is_synthetic=False, run_followups=True,
-           language=None, translation_en=None, assistant_engine=None):
+           language=None, translation_en=None, assistant_engine=None,
+           voice_id=None, location_source=None, location_accuracy_m=None, geocoded_address=None):
     description = validate(category, description, latitude, longitude, address)
     translation_en = validate_language(language, translation_en, assistant_engine)
+    if location_source is not None and location_source not in LOCATION_SOURCES:
+        raise IntakeError("Unknown location source.")
+    if location_accuracy_m is not None:
+        try:
+            location_accuracy_m = float(location_accuracy_m)
+        except (TypeError, ValueError):
+            raise IntakeError("Location accuracy must be a number of metres.") from None
+        if not 0 <= location_accuracy_m <= 50_000:
+            raise IntakeError("Location accuracy is out of range.")
+    geocoded_address = (geocoded_address or "").strip()[:300] or None
     latitude, longitude = float(latitude), float(longitude)
     detected = detect_language(description)["language"]
     if translation_en and (language or detected or "en") == "en":
@@ -63,7 +77,7 @@ def create(user, category, description, latitude, longitude, address=None, image
         raise IntakeError(f"You already submitted this report ({dup['public_id']}).", 409,
                           {"public_id": dup["public_id"]})
     if REQUIRE_ISSUE_PHOTO and not image:
-        raise IntakeError("A photo of the issue is required.", 400)
+        raise IntakeError("A photo of the issue is required. It helps the team find and assess the problem.", 422)
 
     # Classification may also read the citizen-reviewed translation; the stored description stays original.
     cls = ai.classify_complaint(description + ("\n" + translation_en if translation_en else ""), category)
@@ -90,7 +104,8 @@ def create(user, category, description, latitude, longitude, address=None, image
                  "address", "ward", "zone", "image_path", "image_hash", "proof_verified", "proof_check",
                  "status", "severity", "ai_category", "ai_confidence", "ai_summary", "ai_engine",
                  "is_synthetic", "created_at", "updated_at", "original_language", "detected_language",
-                 "description_translation_en", "translation_engine", "assistant_engine"],
+                 "description_translation_en", "translation_engine", "assistant_engine",
+                 "location_source", "location_accuracy_m", "geocoded_address"],
                 [tracking, user["id"], final_category, description, latitude, longitude,
                  (address or "").strip() or None, area["ward"], area["zone"],
                  photo["stored_name"] if photo else None, photo["image_hash"] if photo else None,
@@ -99,7 +114,14 @@ def create(user, category, description, latitude, longitude, address=None, image
                  "submitted", cls["severity"], cls["category"], cls.get("confidence"),
                  cls["summary"], cls["engine"], 1 if is_synthetic else 0, ts, ts,
                  language, detected, translation_en,
-                 "citizen_reviewed" if translation_en else None, assistant_engine])
+                 "citizen_reviewed" if translation_en else None, assistant_engine,
+                 location_source, location_accuracy_m, geocoded_address])
+            if voice_id:
+                try:
+                    vid = voice.claim(conn, user, voice_id, cid)
+                except voice.VoiceError as e:
+                    raise IntakeError(e.message, e.status)
+                conn.execute("UPDATE complaints SET voice_recording_id=? WHERE id=?", (vid, cid))
             match = asset_svc.match_complaint(conn, cid, final_category, latitude, longitude)
             conn.execute("""INSERT INTO notifications (user_id, complaint_id, title, message, type, created_at)
                             VALUES (?,?,?,?, 'info', ?)""",

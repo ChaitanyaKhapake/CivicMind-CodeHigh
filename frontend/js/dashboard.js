@@ -62,11 +62,12 @@ async function loadDashboard() {
   set('kResolved', CM.num(m.resolved_complaints));
   set('kRate', m.resolution_rate === null ? 'No complaints yet' : `${m.resolution_rate}% of complaints`);
   set('kMedian', m.median_resolution_hours === null ? '—' : fmtHours(m.median_resolution_hours));
-  set('kCitizens', CM.num(m.reporting_citizens));
-  set('kTotal', CM.num(m.total_complaints));
+  set('kOverdue', CM.num(m.overdue_work_orders));
+  set('kOpenWo', `${CM.num(m.open_work_orders)} open work order(s)`);
+  set('kAwaiting', CM.num(m.awaiting_verification));
   const tips = { kOpen: 'open_complaints', kInc: 'open_incidents', kPending: 'actions_awaiting_approval',
                  kFindings: 'open_risk_findings', kResolved: 'resolution_rate', kMedian: 'median_resolution_hours',
-                 kCitizens: 'reporting_citizens' };
+                 kOverdue: 'overdue_work_orders', kAwaiting: 'awaiting_verification' };
   Object.entries(tips).forEach(([id, key]) => { if (def[key]) $(id).closest('.metric').title = def[key]; });
   $('demoBanner').hidden = !m.synthetic_complaints;
 

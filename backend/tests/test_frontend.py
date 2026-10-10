@@ -75,8 +75,40 @@ const d = JSON.parse(process.argv[3]);
 vm.runInContext('D = ' + JSON.stringify(d), ctx);
 process.stdout.write(vm.runInContext(`UtilityLayer.renderDetail(D.detail) + UtilityLayer.renderTrace(D.trace, 'trace')
   + UtilityLayer.renderTrace(D.iso, 'isolation') + UtilityLayer.renderAnswer(D.answer) + UtilityLayer.renderHistory(D.history)
-  + utilityContextCard(D.ctx, 1) + briefingView(D.briefing)`, ctx));
+  + utilityContextCard(D.ctx, 1) + briefingView(D.briefing) + workOrdersCard(D.wos, D.cons, D.winc)`, ctx));
 """
+
+CITIZEN_HARNESS = r"""
+const fs = require('fs'), vm = require('vm');
+const ctx = { console, setTimeout, setInterval, clearInterval, URLSearchParams, encodeURIComponent,
+  location: { protocol: 'http:', search: '', pathname: '/citizen.html', href: '' },
+  localStorage: { getItem: (k) => k === 'cm_user' ? JSON.stringify({ role: 'citizen', name: 'C' }) : 't', setItem(){}, removeItem(){} },
+  document: { addEventListener(){}, getElementById(){ return null; }, querySelectorAll(){ return []; }, documentElement: {} },
+  navigator: {}, L: undefined };
+vm.createContext(ctx);
+for (const f of ['api.js', 'common.js', 'i18n.js', 'voice-recorder.js', 'citizen.js']) vm.runInContext(fs.readFileSync(process.argv[2] + '/' + f, 'utf8'), ctx);
+vm.runInContext('C = ' + process.argv[3], ctx);
+process.stdout.write(vm.runInContext('complaintCard(C)', ctx));
+"""
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+def test_citizen_card_escapes_untrusted_text(tmp_path):
+    c = {"id": 1, "public_id": EVIL, "category": EVIL, "ward": EVIL, "status": "in_progress", "description": EVIL,
+         "has_photo": True, "next_step": EVIL, "tracking_code": EVIL, "created_at": "2026-01-01 00:00:00",
+         "updated_at": "2026-01-01 00:00:00", "incident": {"id": 1, "public_id": EVIL},
+         "language": {"translation_en": EVIL}, "estimate": {"kind": EVIL, "at": None, "basis": EVIL},
+         "voice": {"transcript": EVIL, "transcription_status": EVIL},
+         "resolution_photos": [{"url": EVIL, "label": EVIL}],
+         "history": [{"label": EVIL, "at": "2026-01-01 00:00:00"}]}
+    script = tmp_path / "c.js"
+    script.write_text(CITIZEN_HARNESS, encoding="utf-8")
+    out = subprocess.run([NODE, str(script), JS_DIR, json.dumps(c)], capture_output=True, text=True,
+                         encoding="utf-8", timeout=60)
+    assert out.returncode == 0, out.stderr
+    for raw in ("<img src=x", "<script>", "</textarea><img", "\" onerror"):
+        assert raw not in out.stdout, raw
+    assert "&lt;/textarea&gt;&lt;img src=x onerror=alert(1)&gt;" in out.stdout
 
 
 @pytest.mark.skipif(not NODE, reason="node not installed")
@@ -106,6 +138,18 @@ def test_utility_renderers_escape_untrusted_text(tmp_path):
         "briefing": {"engine": "records", "summary": EVIL, "facts": [{"text": EVIL, "refs": [EVIL]}], "hypotheses": [EVIL],
                      "data_gaps": [EVIL], "note": EVIL,
                      "checklist": {"steps": [{"step": EVIL, "detail": EVIL, "owner": EVIL}]}},
+        "wos": [{"id": 1, "public_id": EVIL, "task": EVIL, "status": s, "department": EVIL, "priority": EVIL,
+                 "overdue": True, "team_name": EVIL, "est_start": None, "est_completion": None, "actual_start": None,
+                 "actual_completion": None, "verification_note": EVIL,
+                 "contractor": {"name": EVIL, "contractor_code": EVIL, "contact_person": EVIL, "contact_role": EVIL,
+                                "phone": EVIL, "office_address": EVIL, "label": EVIL, "is_synthetic": True,
+                                "verification_status": EVIL},
+                 "evidence": [{"id": 2, "kind": EVIL, "check": {"verdict": EVIL}}],
+                 "history": [{"created_at": "2026-01-01 00:00:00", "actor": EVIL, "kind": EVIL, "to_status": EVIL,
+                              "new_value": EVIL, "note": EVIL}]}
+                for s in ("assigned", "in_progress", "awaiting_verification")],
+        "cons": [{"id": 3, "name": EVIL, "is_active": True, "is_synthetic": True}],
+        "winc": {"id": 1, "current_action": {"status": "approved", "action_text": EVIL, "assigned_team": EVIL}},
     }
     script = tmp_path / "u.js"
     script.write_text(UTIL_HARNESS, encoding="utf-8")

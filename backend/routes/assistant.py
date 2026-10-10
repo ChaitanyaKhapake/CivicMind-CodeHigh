@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from auth import current_user, require_citizen
 from config import CIVILIAN_LANGUAGES
-from services import assistant
+from services import assistant, chatbot
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
@@ -39,6 +39,19 @@ class AssistIn(BaseModel):
     text: str = Field(min_length=10, max_length=2000)
     language: str = Field(default="en", max_length=5)
     category_hint: str | None = Field(default=None, max_length=60)
+
+
+class ChatIn(BaseModel):
+    message: str = Field(min_length=1, max_length=500)
+    language: str = Field(default="en", max_length=5)
+
+
+@router.post("/chat")
+def chat(body: ChatIn, user: dict = Depends(require_citizen)):
+    if body.language not in CIVILIAN_LANGUAGES:
+        raise HTTPException(422, {"message": "Unsupported language.", "allowed": list(CIVILIAN_LANGUAGES)})
+    _throttle(("chat", user["id"]))
+    return chatbot.reply(user, body.message, body.language)
 
 
 @router.get("/capabilities")

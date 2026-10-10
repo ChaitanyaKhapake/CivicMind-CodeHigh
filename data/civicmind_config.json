@@ -195,7 +195,7 @@
     "window_hours": 48,
     "min_size": 3
   },
-  "require_issue_photo": false,
+  "require_issue_photo": true,
   "category_groups": [
     [
       "Water Leakage",

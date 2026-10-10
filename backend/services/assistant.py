@@ -23,6 +23,7 @@ added without touching routes or the UI.
 import json
 import re
 
+import config
 from config import CATEGORIES, CIVILIAN_LANGUAGES
 from services import ai
 
@@ -153,13 +154,18 @@ def _provider():
 
 
 def capabilities():
+    from services import voice  # local import: voice does not depend on the assistant
     p = _provider()
+    stt = voice.stt_available()
     return {
         "languages": [{"code": k, "label": v} for k, v in CIVILIAN_LANGUAGES.items()],
         "assistant_engine": p.name if p else "rules",
         "translation_available": bool(p and p.translation_available()),
         "classification": "ai_with_rules_fallback" if p else "rules",
-        "speech": {"available": False, "reason": "Voice input is not configured in this build."},
+        "speech": {"available": stt, "recording": True,
+                   "max_seconds": config.VOICE_MAX_SECONDS,
+                   "reason": None if stt else ("Speech-to-text is not configured; recordings are kept for staff "
+                                               "and you type the description.")},
         "note": ("Suggestions only. You review and edit everything before submitting; your original words "
                  "are always kept."),
     }

@@ -323,6 +323,54 @@ def confirm(user, job_code):
     return {"job_code": job_code, "status": "committed", "data_source_id": source_id, "summary": summary}
 
 
+def rollback(user, job_code):
+    """Delete exactly the records a committed import created, if nothing depends on them yet.
+
+    Blockers: confirmed incident links, maintenance records, work orders that name
+    the assets, or connections recorded later by other imports/officers."""
+    with db(immediate=True) as conn:
+        job = conn.execute("SELECT * FROM utility_import_jobs WHERE job_code=?", (job_code,)).fetchone()
+        if not job:
+            raise ImportError_("Import not found.", 404)
+        if job["status"] != "committed":
+            raise ImportError_(f"Only committed imports can be rolled back (this one is {job['status']}).", 409)
+        assets = conn.execute("SELECT id, asset_id FROM utility_assets WHERE import_job_id=?", (job["id"],)).fetchall()
+        pks = [a["id"] for a in assets]
+        codes = [a["asset_id"] for a in assets]
+        blockers = []
+        if pks:
+            marks = ",".join("?" * len(pks))
+            if conn.execute(f"SELECT 1 FROM incident_utility_assets WHERE status='confirmed' AND asset_id IN ({marks})",
+                            pks).fetchone():
+                blockers.append("an incident has a confirmed link to an imported asset")
+            if conn.execute(f"SELECT 1 FROM utility_maintenance WHERE asset_id IN ({marks})", pks).fetchone():
+                blockers.append("maintenance has been recorded on an imported asset")
+            if conn.execute(f"""SELECT 1 FROM utility_connections WHERE (from_asset IN ({marks}) OR to_asset IN ({marks}))
+                                AND (import_job_id IS NULL OR import_job_id != ?)""", (*pks, *pks, job["id"])).fetchone():
+                blockers.append("other connections now reference an imported asset")
+            for code in codes:
+                if conn.execute("SELECT 1 FROM work_orders WHERE utility_asset_ids LIKE ?", (f'%"{code}"%',)).fetchone():
+                    blockers.append(f"work orders reference {code}")
+                    break
+        if blockers:
+            raise ImportError_("Rollback refused: " + "; ".join(blockers) + ". Correct the records instead.", 409,
+                               {"blockers": blockers})
+        c = conn.execute("DELETE FROM utility_connections WHERE import_job_id=?", (job["id"],)).rowcount
+        if pks:
+            conn.execute(f"DELETE FROM incident_utility_assets WHERE asset_id IN ({','.join('?' * len(pks))})", pks)
+            conn.execute("DELETE FROM utility_assets WHERE import_job_id=?", (job["id"],))
+        summary = json.loads(job["summary"]) | {"rolled_back": {"assets": len(pks), "connections": c, "at": now(),
+                                                               "by": user["name"]}}
+        conn.execute("UPDATE utility_import_jobs SET status='rolled_back', summary=? WHERE id=?",
+                     (json.dumps(summary), job["id"]))
+        if job["data_source_id"]:
+            conn.execute("UPDATE utility_data_sources SET status='rolled_back' WHERE id=?", (job["data_source_id"],))
+        conn.execute("INSERT INTO activity (actor, actor_id, action, detail, created_at) VALUES (?,?,?,?,?)",
+                     (user["name"], user["id"], "utility_import_rolled_back",
+                      f"{job_code}: {len(pks)} asset(s) and {c} connection(s) removed", now()))
+    return {"job_code": job_code, "status": "rolled_back", "removed": {"assets": len(pks), "connections": c}}
+
+
 def jobs(limit=50):
     rows = query("""SELECT j.job_code, j.status, j.input_format, j.source_meta, j.summary, j.created_at, j.committed_at,
                     u.name AS created_by_name FROM utility_import_jobs j LEFT JOIN users u ON u.id=j.created_by
