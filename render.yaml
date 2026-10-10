@@ -1,21 +1,28 @@
-# Render blueprint — CivicMind as a Python web service. Deploy only when you
-# intend to publish it. NOTE: on Render's free plan the filesystem is
-# EPHEMERAL — the SQLite database and uploaded photos are lost on every
-# redeploy/restart. Attach a persistent disk (paid) and point CIVICMIND_DB /
-# CIVICMIND_EVIDENCE_DIR at it for anything beyond a throwaway demo.
+# Render blueprint — CivicMind as a Docker web service. Deploy only when you intend to publish it.
+# A persistent disk is REQUIRED for real use: without it the SQLite database and uploaded
+# photos/videos are lost on every redeploy or restart (Render's free plan has no disks).
 services:
   - type: web
     name: civicmind
-    runtime: python
-    plan: free
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers
+    runtime: docker
+    plan: starter               # disks need a paid plan
+    healthCheckPath: /api/health
+    disk:
+      name: civicmind-data
+      mountPath: /data
+      sizeGB: 5
     envVars:
+      - key: CIVICMIND_ENV
+        value: production
       - key: CIVICMIND_SECRET
-        generateValue: true
-      - key: SARVAM_API_KEY
-        sync: false          # optional; set in the Render dashboard
+        generateValue: true     # long random value, created once by Render
       - key: CIVICMIND_ADMIN_EMAIL
-        sync: false          # creates this admin on first start if missing
+        sync: false             # creates this admin on first start if missing
       - key: CIVICMIND_ADMIN_PASSWORD
-        sync: false          # >= 12 characters
+        sync: false             # >= 12 characters; remove after the first start
+      - key: SARVAM_API_KEY
+        sync: false             # optional: AI classification, chatbot phrasing, speech-to-text
+      - key: TINYFISH_API_KEY
+        sync: false             # optional: public data-source discovery for admins
+      - key: CIVICMIND_REVERSE_GEOCODER
+        value: none             # "nominatim" only within the Nominatim usage policy (see .env.example)

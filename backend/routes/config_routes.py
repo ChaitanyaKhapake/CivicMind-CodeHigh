@@ -3,8 +3,8 @@ CivicMind — public configuration endpoints (no secrets, no passwords).
 """
 from fastapi import APIRouter
 
-from config import (CATEGORIES, DEPARTMENT_MAP, WARDS_RAW, CITY_NAME, CITY_CENTER, DEMO_MODE,
-                    DEMO_ACCOUNTS, CLUSTER_RADIUS_KM, CLUSTER_TIME_WINDOW_HOURS, MIN_CLUSTER_SIZE,
+from config import (CATEGORIES, DEPARTMENT_MAP, WARDS_RAW, CITY_NAME, CITY_CENTER,
+                    CLUSTER_RADIUS_KM, CLUSTER_TIME_WINDOW_HOURS, MIN_CLUSTER_SIZE,
                     REQUIRE_ISSUE_PHOTO, SERVICE_RADIUS_KM, ASSET_MATCH_RADIUS_M)
 from services import geo
 
@@ -29,20 +29,5 @@ def get_config():
     }
 
 
-@router.get("/demo-info")
-def demo_info():
-    """In demo mode, list the demo account e-mails (NEVER passwords).
-    Passwords are generated locally by `seed_demo.py` and written to
-    data/demo/demo_credentials.txt on the presenter's machine."""
-    if not DEMO_MODE:
-        return {"enabled": False, "accounts": []}
-    return {"enabled": True,
-            "accounts": [{"role": a.get("role"), "email": a.get("email"), "name": a.get("name")}
-                         for a in DEMO_ACCOUNTS],
-            "password_hint": "See data/demo/demo_credentials.txt on the presenter's machine."}
-
-
-@router.get("/demo-credentials", include_in_schema=False)
-def demo_credentials_removed():
-    # Kept so old frontends get a harmless answer; passwords are never served.
-    return {"enabled": False, "accounts": []}
+# No endpoint lists accounts or credentials. Demo logins are handed to presenters out of band
+# (data/demo/demo_credentials.txt is written locally by seed_demo.py and never served).

@@ -70,20 +70,6 @@ $('registerForm').addEventListener('submit', async (e) => {
     (c.wards || []).forEach(w => { const o = document.createElement('option'); o.value = w.ward; o.textContent = w.ward; $('rWard').appendChild(o); });
   } catch { /* optional field */ }
 
-  try {
-    const d = await CM.api('/api/demo-info');
-    if (d.enabled && d.accounts.length) {
-      $('demoBox').hidden = false;
-      d.accounts.forEach(a => {
-        const chip = document.createElement('button');
-        chip.type = 'button'; chip.className = 'chip';
-        chip.textContent = `${CM.titleCase(a.role)} · ${a.email}`;
-        chip.addEventListener('click', () => { setTab(false); $('email').value = a.email; $('password').focus(); });
-        $('demoFill').appendChild(chip);
-      });
-    }
-  } catch { /* demo info is optional */ }
-
   // An existing VALID session goes straight to its dashboard.
   const u = CM.getUser();
   if (u && CM.getToken()) {

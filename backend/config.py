@@ -148,9 +148,13 @@ RISK_RULES = CFG.get("risk_rules", {})
 # ---------------------------------------------------------------------------
 # Runtime mode
 # ---------------------------------------------------------------------------
-# Demo mode is switched on explicitly (run_demo.* sets it) and only changes
-# what the login page shows (demo account e-mails, never passwords).
+# Demo mode is switched on explicitly (run_demo.* sets it). It no longer changes
+# what any page shows: account e-mails and passwords are never served.
 DEMO_MODE = _env_bool("CIVICMIND_DEMO_MODE", False)
+# "production" makes start-up strict: a fixed CIVICMIND_SECRET is required (a generated
+# key file would sign everyone out on every redeploy) and the demo database is refused.
+ENVIRONMENT = _env("CIVICMIND_ENV", "development").strip().lower()
+IS_PRODUCTION = ENVIRONMENT == "production"
 # Comma-separated list of allowed cross-origin callers. Empty = same-origin only.
 CORS_ORIGINS = [o.strip() for o in _env("CIVICMIND_CORS_ORIGINS", "").split(",") if o.strip()]
 MAX_REQUEST_BYTES = int(_env("CIVICMIND_MAX_REQUEST_BYTES", str(9 * 1024 * 1024)))
@@ -186,6 +190,23 @@ def _resolve_secret():
 
 
 SECRET_KEY = _resolve_secret()
+SECRET_FROM_ENV = bool(_env("CIVICMIND_SECRET").strip())
+
+
+def production_problems():
+    """Start-up checks for CIVICMIND_ENV=production. Returns a list of problems (empty = OK)."""
+    if not IS_PRODUCTION:
+        return []
+    problems = []
+    if not SECRET_FROM_ENV or len(_env("CIVICMIND_SECRET").strip()) < 32:
+        problems.append("CIVICMIND_SECRET must be set to a random value of at least 32 characters.")
+    if DEMO_MODE:
+        problems.append("CIVICMIND_DEMO_MODE must not be enabled in production.")
+    if os.path.normpath(DB_PATH).replace("\\", "/").endswith("data/demo/civicmind_demo.db"):
+        problems.append("CIVICMIND_DB points at the demo database.")
+    if _env_bool("TINYFISH_MOCK_MODE", False):
+        problems.append("TINYFISH_MOCK_MODE must be false in production (mock content is fictional).")
+    return problems
 TOKEN_TTL_HOURS = int(_env("CIVICMIND_TOKEN_TTL_HOURS", "12"))
 PBKDF2_ITERATIONS = int(_env("CIVICMIND_PBKDF2_ITERATIONS", "310000"))
 

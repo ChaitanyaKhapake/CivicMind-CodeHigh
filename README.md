@@ -229,7 +229,7 @@ traces; API keys only on the server. Rotate any credential that was ever shared 
 - Officers are not yet restricted to their own department's incidents (departments are recorded, not enforced).
 - In-process throttles and caches assume a single server instance; SQLite only.
 - Hindi/Marathi interface strings should be reviewed by native speakers.
-- `CivicMind_Deployment_Guide.docx` describes an older version.
+- `CivicMind_Deployment_Guide.docx` describes an older version; `docs/DEPLOYMENT.md` is current.
 
 ## Project structure
 
@@ -250,9 +250,12 @@ civicmind/
 
 ## Deployment notes
 
-Docker: `docker build -t civicmind .` then `docker run -p 8000:8000 -v civicmind-data:/data -e CIVICMIND_SECRET=... civicmind`.
-Serve behind HTTPS. Render's free plan has an ephemeral disk (data lost on restart). OpenStreetMap's public tile
-servers are for light use only — use a tile provider for production.
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** (settings table, Docker, Render, VPS + Nginx, go-live checklist).
+In short: `CIVICMIND_ENV=production` (the Docker image sets it) refuses to start without a strong
+`CIVICMIND_SECRET`, in demo mode, on the demo database or with TinyFish mock mode; data lives on a persistent
+`/data` volume; run one instance behind HTTPS. The sign-in page never lists accounts — demo logins are kept
+out of the repository (`data/demo/`, git-ignored). OpenStreetMap's public tile servers are for light use only —
+use a tile provider for production.
 
 ## Team
 

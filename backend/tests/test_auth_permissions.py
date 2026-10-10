@@ -147,10 +147,41 @@ def test_admin_user_listing_has_no_secrets(client, make_user):
     assert r.status_code == 422
 
 
-def test_demo_credentials_never_expose_passwords(client):
-    assert client.get("/api/demo-credentials").json() == {"enabled": False, "accounts": []}
-    info = client.get("/api/demo-info").json()
-    assert "password" not in json.dumps(info).replace("password_hint", "")
+def test_no_endpoint_or_page_lists_accounts(client):
+    """Account e-mails and passwords are never served — not even in demo mode."""
+    for path in ("/api/demo-credentials", "/api/demo-info"):
+        assert client.get(path).status_code == 404
+    page = client.get("/index.html").text + client.get("/js/app.js").text
+    assert "@civicmind.in" not in page and "demo-info" not in page and "demoBox" not in page
+
+
+def test_production_mode_refuses_unsafe_configuration(client, monkeypatch, tmp_path):
+    import config
+    import main
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(config, "IS_PRODUCTION", True)
+    monkeypatch.setenv("CIVICMIND_SECRET", "short")
+    assert any("CIVICMIND_SECRET" in p for p in config.production_problems())
+    with pytest.raises(RuntimeError, match="will not start in production"):
+        with TestClient(main.app):
+            pass
+    monkeypatch.setenv("CIVICMIND_SECRET", "x" * 48)
+    monkeypatch.setattr(config, "SECRET_FROM_ENV", True)
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+    assert config.production_problems() == ["CIVICMIND_DEMO_MODE must not be enabled in production."]
+    monkeypatch.setattr(config, "DEMO_MODE", False)
+    assert config.production_problems() == []
+    monkeypatch.setattr(config, "IS_PRODUCTION", False)
+    monkeypatch.setenv("CIVICMIND_SECRET", "")
+    assert config.production_problems() == []      # development stays permissive
+
+
+def test_hsts_only_over_https(client):
+    assert "strict-transport-security" not in client.get("/api/health").headers
+    from fastapi.testclient import TestClient
+    import main
+    with TestClient(main.app, base_url="https://civicmind.example") as secure:
+        assert secure.get("/api/health").headers["strict-transport-security"].startswith("max-age=")
 
 
 def test_reset_refused_on_non_demo_database(client, make_user):

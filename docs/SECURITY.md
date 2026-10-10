@@ -15,7 +15,6 @@ instead of 403 where revealing existence would leak information.
 | POST | `/api/auth/logout-all` | any | bumps token version → all tokens revoked | — |
 | POST | `/api/auth/password` | any | requires current password; revokes old tokens | — |
 | GET | `/api/config`, `/api/wards`, `/api/health` | public | no secrets | — |
-| GET | `/api/demo-info` | public | demo mode only; e-mails, never passwords | — |
 | POST | `/api/complaints` | C | validated category/text/coords (finite, in service area); optional photo validated; duplicate guard | activity |
 | GET | `/api/complaints` | C own · O · A | admins also see citizen e-mail | — |
 | GET | `/api/complaints/{id}` | owner · O · A | others 404 | — |
@@ -125,6 +124,13 @@ instead of 403 where revealing existence would leak information.
   "untrusted data" instruction.
 - **Concurrency**: state changes run in `BEGIN IMMEDIATE` transactions and update with `WHERE status = <expected>`;
   a lost race returns 409 and changes nothing. Public ids derive from AUTOINCREMENT keys (never reused).
+
+## Deployment
+
+- `CIVICMIND_ENV=production` refuses to start without a fixed 32+ character `CIVICMIND_SECRET`, with demo mode,
+  on the demo database or with TinyFish mock mode.
+- `Strict-Transport-Security` is sent on HTTPS requests (directly or via a proxy forwarding `X-Forwarded-Proto`).
+- No page or endpoint lists accounts or credentials, in any mode.
 
 ## Known gaps
 

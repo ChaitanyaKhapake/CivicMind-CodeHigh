@@ -49,10 +49,16 @@ logging.getLogger("uvicorn.access").addFilter(_RedactTokens())
 
 @asynccontextmanager
 async def lifespan(_app):
+    problems = config.production_problems()
+    if problems:   # CIVICMIND_ENV=production refuses to start in an unsafe configuration
+        raise RuntimeError("CivicMind will not start in production: " + " ".join(problems))
     init_db()
+    if config.IS_PRODUCTION and is_demo_db():
+        raise RuntimeError("CivicMind will not start in production on a database marked as a DEMO database.")
     result = bootstrap.bootstrap()
     voice.purge()  # retention policy for voice recordings
     media.purge()  # uploads never attached to a report
+    print(f"[CivicMind] Environment: {config.ENVIRONMENT}")
     print(f"[CivicMind] Database: {config.DB_PATH}{'  (DEMO database)' if is_demo_db() else ''}")
     print(f"[CivicMind] Bootstrap: {result}")
     print("[CivicMind] AI engine: " + (f"Sarvam AI ({ai.SARVAM_CHAT_MODEL}) with rule-based fallback"
@@ -68,7 +74,7 @@ app = FastAPI(title="CivicMind API", version="3.0.0", lifespan=lifespan,
               description="Civic complaint intelligence: complaints -> incidents -> infrastructure risk -> verified action.")
 
 if CORS_ORIGINS:
-    app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["GET", "POST"],
+    app.add_middleware(CORSMiddleware, allow_origins=CORS_ORIGINS, allow_methods=["GET", "POST", "DELETE"],
                        allow_headers=["Authorization", "Content-Type"])
 
 CSP = ("default-src 'self'; "
@@ -122,6 +128,9 @@ class GuardMiddleware:
                 hdrs = list(msg.get("headers", []))
                 names = {h[0].lower() for h in hdrs}
                 hdrs += [h for h in SECURITY_HEADERS if h[0] not in names]
+                if scope.get("scheme") == "https" and b"strict-transport-security" not in names:
+                    # Served over HTTPS (directly or via a trusted proxy): keep browsers on HTTPS.
+                    hdrs.append((b"strict-transport-security", b"max-age=31536000; includeSubDomains"))
                 path = scope["path"]
                 if b"cache-control" not in names:
                     if path.startswith("/api/"):
