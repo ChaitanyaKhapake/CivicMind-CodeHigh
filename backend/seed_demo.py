@@ -139,10 +139,14 @@ def main():
     shared = os.environ.get("CIVICMIND_DEMO_PASSWORD", "")
     if shared and len(shared) < 8:
         sys.exit("CIVICMIND_DEMO_PASSWORD must be at least 8 characters.")
+    # Officer/admin demo accounts can get their own, stronger password (an online demo is public).
+    staff = os.environ.get("CIVICMIND_DEMO_STAFF_PASSWORD", "")
+    if staff and len(staff) < 12:
+        sys.exit("CIVICMIND_DEMO_STAFF_PASSWORD must be at least 12 characters.")
     new_creds = []
     for acc in DEMO_ACCOUNTS:
         if not query("SELECT 1 FROM users WHERE email=?", (acc["email"],), one=True):
-            pw = shared or secrets.token_urlsafe(9)
+            pw = (staff if staff and acc["role"] in ("officer", "admin") else shared) or secrets.token_urlsafe(9)
             create_user(acc["name"], acc["email"], pw, role=acc["role"], department=acc.get("department"))
             new_creds.append((acc["role"], acc["email"], pw))
     if new_creds:

@@ -33,8 +33,19 @@ Put Nginx (or the platform's proxy) in front for TLS: `deploy/nginx-civicmind.co
 limit needed for video uploads, forwards `X-Forwarded-Proto` (so HSTS is sent) and disables buffering for
 live updates. The image has a health check on `/api/health`.
 
-**Render** — `render.yaml` (Docker runtime, persistent disk at `/data`, generated secret, health check).
-A paid plan is needed for the disk; without a disk all data is lost on every deploy.
+**Render (public demo)** — `render.yaml` deploys a public copy of the **fictional demo city**
+(`CIVICMIND_ENV=demo`, `CIVICMIND_SEED_DEMO=1`): Docker runtime, persistent disk at `/data`, generated secret,
+health check, Singapore region, CORS for the citizen app. Steps:
+
+1. Push this repository to GitHub (private is fine).
+2. Render → **New → Blueprint** → connect GitHub → pick the repository → Render reads `render.yaml`.
+3. When asked, enter `CIVICMIND_DEMO_PASSWORD` (demo citizens, 8+ chars) and `CIVICMIND_DEMO_STAFF_PASSWORD`
+   (demo officer/admin, 12+ chars) — choose them yourself; optionally `SARVAM_API_KEY` / `TINYFISH_API_KEY`.
+4. Apply. The first deploy builds the image and seeds the demo (a few minutes); the site is then at
+   `https://<service>.onrender.com`. Demo logins: the usual demo e-mails with the passwords you chose.
+
+A paid instance type is needed for the disk; without a disk all data is lost on every deploy. For a real
+deployment switch to `CIVICMIND_ENV=production` as described at the top of `render.yaml`.
 
 **VPS without Docker** — `deploy/civicmind.service` (systemd, env file `/etc/civicmind.env`, data in
 `/var/lib/civicmind`) + `deploy/nginx-civicmind.conf`.

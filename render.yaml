@@ -1,28 +1,42 @@
-# Render blueprint — CivicMind as a Docker web service. Deploy only when you intend to publish it.
-# A persistent disk is REQUIRED for real use: without it the SQLite database and uploaded
-# photos/videos are lost on every redeploy or restart (Render's free plan has no disks).
+# Render blueprint — a PUBLIC DEMO copy of CivicMind with the fictional demo city.
+# Render → New → Blueprint → pick this repository. A persistent disk keeps the database and uploads across
+# restarts (disks need a paid instance type). Everything shown is fictional and labelled synthetic.
+#
+# For a REAL deployment instead: set CIVICMIND_ENV=production, delete CIVICMIND_SEED_DEMO and the two
+# CIVICMIND_DEMO_* passwords, set TINYFISH_MOCK_MODE=false, and create the first admin with
+# CIVICMIND_ADMIN_EMAIL / CIVICMIND_ADMIN_PASSWORD (see docs/DEPLOYMENT.md). Use a fresh disk.
 services:
   - type: web
     name: civicmind
     runtime: docker
     plan: starter               # disks need a paid plan
+    region: singapore           # closest Render region to Pune
     healthCheckPath: /api/health
+    autoDeploy: true
     disk:
       name: civicmind-data
       mountPath: /data
       sizeGB: 5
     envVars:
       - key: CIVICMIND_ENV
-        value: production
+        value: demo             # strict secret check, demo data allowed
+      - key: CIVICMIND_SEED_DEMO
+        value: "1"              # build the fictional demo city on first start (idempotent afterwards)
       - key: CIVICMIND_SECRET
         generateValue: true     # long random value, created once by Render
-      - key: CIVICMIND_ADMIN_EMAIL
-        sync: false             # creates this admin on first start if missing
-      - key: CIVICMIND_ADMIN_PASSWORD
-        sync: false             # >= 12 characters; remove after the first start
+      - key: CIVICMIND_DEMO_PASSWORD
+        sync: false             # YOU choose it in the dashboard: password of the demo CITIZEN accounts (8+ chars)
+      - key: CIVICMIND_DEMO_STAFF_PASSWORD
+        sync: false             # YOU choose it: password of the demo OFFICER and ADMIN accounts (12+ chars)
+      - key: CIVICMIND_CORS_ORIGINS
+        value: https://localhost   # the CivicMind citizen Android app
+      - key: TINYFISH_MOCK_MODE
+        value: "true"           # labelled fictional responses until a TINYFISH_API_KEY is added
+      - key: TINYFISH_API_KEY
+        sync: false             # optional
       - key: SARVAM_API_KEY
         sync: false             # optional: AI classification, chatbot phrasing, speech-to-text
-      - key: TINYFISH_API_KEY
-        sync: false             # optional: public data-source discovery for admins
       - key: CIVICMIND_REVERSE_GEOCODER
-        value: none             # "nominatim" only within the Nominatim usage policy (see .env.example)
+        value: nominatim        # address search / autofill within the Nominatim usage policy (1 req/s)
+      - key: CIVICMIND_REVERSE_GEOCODER_USER_AGENT
+        value: CivicMind-demo/1.0 (Build with Bharat 4.0 hackathon demo; Render)

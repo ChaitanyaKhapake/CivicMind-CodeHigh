@@ -51,7 +51,7 @@ logging.getLogger("uvicorn.access").addFilter(_RedactTokens())
 async def lifespan(_app):
     problems = config.production_problems()
     if problems:   # CIVICMIND_ENV=production refuses to start in an unsafe configuration
-        raise RuntimeError("CivicMind will not start in production: " + " ".join(problems))
+        raise RuntimeError(f"CivicMind will not start in {'production' if config.IS_PRODUCTION else config.ENVIRONMENT} mode: " + " ".join(problems))
     init_db()
     if config.IS_PRODUCTION and is_demo_db():
         raise RuntimeError("CivicMind will not start in production on a database marked as a DEMO database.")

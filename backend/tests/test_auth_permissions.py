@@ -162,7 +162,7 @@ def test_production_mode_refuses_unsafe_configuration(client, monkeypatch, tmp_p
     monkeypatch.setattr(config, "IS_PRODUCTION", True)
     monkeypatch.setenv("CIVICMIND_SECRET", "short")
     assert any("CIVICMIND_SECRET" in p for p in config.production_problems())
-    with pytest.raises(RuntimeError, match="will not start in production"):
+    with pytest.raises(RuntimeError, match="will not start in production mode"):
         with TestClient(main.app):
             pass
     monkeypatch.setenv("CIVICMIND_SECRET", "x" * 48)
@@ -172,7 +172,12 @@ def test_production_mode_refuses_unsafe_configuration(client, monkeypatch, tmp_p
     monkeypatch.setattr(config, "DEMO_MODE", False)
     assert config.production_problems() == []
     monkeypatch.setattr(config, "IS_PRODUCTION", False)
+    monkeypatch.setattr(config, "ENVIRONMENT", "demo")       # public demo copy: secret required, demo data allowed
+    monkeypatch.setattr(config, "DEMO_MODE", True)
+    assert config.production_problems() == []
     monkeypatch.setenv("CIVICMIND_SECRET", "")
+    assert any("CIVICMIND_SECRET" in p for p in config.production_problems())
+    monkeypatch.setattr(config, "ENVIRONMENT", "development")
     assert config.production_problems() == []      # development stays permissive
 
 

@@ -23,11 +23,15 @@ COPY backend ./backend
 COPY frontend ./frontend
 COPY data/civicmind_config.json ./data/civicmind_config.json
 COPY data/osm ./data/osm
+COPY deploy/docker-entrypoint.sh /usr/local/bin/civicmind-start
 
-RUN rm -rf /app/backend/tests \
+RUN sed -i 's/\r$//' /usr/local/bin/civicmind-start && chmod 755 /usr/local/bin/civicmind-start \
+ && command -v setpriv >/dev/null \
+ && rm -rf /app/backend/tests \
  && useradd --create-home --uid 10001 civicmind \
- && mkdir -p /data/evidence && chown -R civicmind /data /app/backend
-USER civicmind
+ && mkdir -p /data/evidence && chown -R civicmind:civicmind /data /app/backend
+# The start script runs as root only long enough to give /data (a platform disk is mounted root-owned)
+# to the "civicmind" user, then drops privileges with setpriv before seeding or serving.
 VOLUME ["/data"]
 
 WORKDIR /app/backend
@@ -37,4 +41,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # --proxy-headers + FORWARDED_ALLOW_IPS: trust X-Forwarded-For/Proto from the platform's proxy, so
 # throttling sees real client IPs and HTTPS is detected (HSTS). Narrow FORWARDED_ALLOW_IPS to your
 # proxy's address if the container port is reachable directly.
-CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT} --proxy-headers --workers 1 --timeout-keep-alive 30"]
+# Set CIVICMIND_SEED_DEMO=1 (with CIVICMIND_ENV=demo) to run a public copy of the fictional demo.
+CMD ["civicmind-start"]

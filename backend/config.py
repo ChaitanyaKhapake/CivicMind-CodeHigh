@@ -194,12 +194,17 @@ SECRET_FROM_ENV = bool(_env("CIVICMIND_SECRET").strip())
 
 
 def production_problems():
-    """Start-up checks for CIVICMIND_ENV=production. Returns a list of problems (empty = OK)."""
-    if not IS_PRODUCTION:
+    """Start-up checks for public deployments. Returns a list of problems (empty = OK).
+
+    production: real data — strong secret, no demo mode, no demo database, no TinyFish mock.
+    demo:       a public copy of the fictional demo — strong secret only (demo data is expected)."""
+    if not IS_PRODUCTION and ENVIRONMENT != "demo":
         return []
     problems = []
     if not SECRET_FROM_ENV or len(_env("CIVICMIND_SECRET").strip()) < 32:
         problems.append("CIVICMIND_SECRET must be set to a random value of at least 32 characters.")
+    if not IS_PRODUCTION:
+        return problems
     if DEMO_MODE:
         problems.append("CIVICMIND_DEMO_MODE must not be enabled in production.")
     if os.path.normpath(DB_PATH).replace("\\", "/").endswith("data/demo/civicmind_demo.db"):
