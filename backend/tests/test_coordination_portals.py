@@ -17,6 +17,13 @@ def test_portal_entry_points_redirect(client):
     assert client.get("/citizen.html").status_code == 200
 
 
+def test_map_tiles_are_allowed(client):
+    """OpenStreetMap refuses tile requests without a Referer, so the policy must send the origin."""
+    r = client.get("/citizen.html")
+    assert r.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert "https://tile.openstreetmap.org" in r.headers["content-security-policy"]
+
+
 def test_login_home_comes_from_server_role(client, make_user):
     homes = {"citizen": "/citizen.html", "officer": "/dashboard.html", "admin": "/admin.html"}
     for role, home in homes.items():

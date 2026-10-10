@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   let center = { lat: 18.5204, lng: 73.8567 };
   try { center = (await CM.api('/api/config')).city_center; } catch { /* default */ }
   map = L.map('map').setView([center.lat, center.lng], 13);
-  const tiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
+  const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
   let tileErrors = 0;
   tiles.on('tileerror', () => { if (++tileErrors > 4) $('tileWarn').hidden = false; });
   ['incidents', 'complaints', 'assets', 'findings'].forEach(k => { layers[k] = L.layerGroup().addTo(map); });

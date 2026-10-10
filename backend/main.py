@@ -72,12 +72,14 @@ CSP = ("default-src 'self'; "
        "script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net; "
        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
        "font-src 'self' https://fonts.gstatic.com; "
-       "img-src 'self' data: blob: https://*.tile.openstreetmap.org https://unpkg.com; "
+       "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://unpkg.com; "
        "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'")
 SECURITY_HEADERS = [
     (b"x-content-type-options", b"nosniff"),
     (b"x-frame-options", b"DENY"),
-    (b"referrer-policy", b"same-origin"),
+    # OpenStreetMap refuses tile requests without a Referer; send only the origin
+    # (never paths or query strings) to other sites.
+    (b"referrer-policy", b"strict-origin-when-cross-origin"),
     (b"permissions-policy", b"geolocation=(self), camera=(), microphone=()"),
     (b"content-security-policy", CSP.encode()),
 ]

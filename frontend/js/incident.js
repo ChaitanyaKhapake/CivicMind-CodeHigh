@@ -466,7 +466,7 @@ function drawMini() {
   if (typeof L === 'undefined') { el.innerHTML = emptyState('Map unavailable offline.'); return; }
   const col = { Critical: '#D9342B', High: '#E8551E', Medium: '#E0A106', Low: '#2E9E5B' }[inc.priority.label] || '#E8551E';
   miniMap = L.map(el, { zoomControl: true, attributionControl: true }).setView([inc.centroid_lat, inc.centroid_lng], 16);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(miniMap);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(miniMap);
   if (inc.view === 'staff') {
     L.circle([inc.centroid_lat, inc.centroid_lng], { radius: Math.max(40, (inc.spread_km || 0) * 1000), color: col, weight: 1.5, fillOpacity: .1 }).addTo(miniMap);
     const pts = [];

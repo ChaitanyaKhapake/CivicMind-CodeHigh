@@ -107,7 +107,7 @@ function renderAssist(d) {
 function initPicker() {
   if (typeof L === 'undefined') { $('pickmap').innerHTML = emptyState('Map could not load. Use “Use my location”.'); return; }
   pickMap = L.map('pickmap').setView([pickLat, pickLng], 13);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(pickMap);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(pickMap);
   pickMarker = L.marker([pickLat, pickLng], { draggable: true }).addTo(pickMap);
   pickMarker.on('dragend', () => setPin(pickMarker.getLatLng().lat, pickMarker.getLatLng().lng));
   pickMap.on('click', e => setPin(e.latlng.lat, e.latlng.lng));
