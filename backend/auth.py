@@ -124,7 +124,7 @@ def user_from_token(token: str):
     data = decode_token(token)
     if not data:
         return None
-    user = query("""SELECT id, name, email, role, department, ward, token_version, is_active
+    user = query("""SELECT id, name, email, role, department, ward, preferred_language, token_version, is_active
                     FROM users WHERE id=?""", (data["uid"],), one=True)
     if not user or not user.get("is_active", 1):
         return None

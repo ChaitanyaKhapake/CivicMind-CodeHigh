@@ -3,9 +3,12 @@ CivicMind — complaint intake (shared by the API and the demo seeder).
 """
 import json
 
-from config import CATEGORIES, REQUIRE_ISSUE_PHOTO, CITY_NAME
+from config import CATEGORIES, REQUIRE_ISSUE_PHOTO, CITY_NAME, CIVILIAN_LANGUAGES
 from database import query, db, now, new_tracking_code, insert_with_public_id
 from services import ai, geo, evidence, clustering, risk, assets as asset_svc
+from services.assistant import detect_language
+
+ASSISTANT_ENGINES = ("sarvam", "rules")
 
 
 class IntakeError(Exception):
@@ -31,10 +34,27 @@ def validate(category, description, latitude, longitude, address=None):
     return description
 
 
+def validate_language(language, translation_en, assistant_engine):
+    """Language metadata is optional and stored beside — never instead of — the original text."""
+    if language is not None and language not in CIVILIAN_LANGUAGES:
+        raise IntakeError("Choose English, Hindi or Marathi.")
+    translation_en = (translation_en or "").strip() or None
+    if translation_en and len(translation_en) > 2000:
+        raise IntakeError("The English translation is too long (max 2000 characters).")
+    if assistant_engine is not None and assistant_engine not in ASSISTANT_ENGINES:
+        raise IntakeError("Unknown assistant engine.")
+    return translation_en
+
+
 def create(user, category, description, latitude, longitude, address=None, image=None,
-           created_at=None, is_synthetic=False, run_followups=True):
+           created_at=None, is_synthetic=False, run_followups=True,
+           language=None, translation_en=None, assistant_engine=None):
     description = validate(category, description, latitude, longitude, address)
+    translation_en = validate_language(language, translation_en, assistant_engine)
     latitude, longitude = float(latitude), float(longitude)
+    detected = detect_language(description)["language"]
+    if translation_en and (language or detected or "en") == "en":
+        translation_en = None  # nothing to translate; keep a single source of truth
 
     dup = query("""SELECT public_id FROM complaints WHERE user_id=? AND category=? AND description=?
                    AND created_at >= datetime('now', '-2 minutes')""",
@@ -45,7 +65,8 @@ def create(user, category, description, latitude, longitude, address=None, image
     if REQUIRE_ISSUE_PHOTO and not image:
         raise IntakeError("A photo of the issue is required.", 400)
 
-    cls = ai.classify_complaint(description, category)
+    # Classification may also read the citizen-reviewed translation; the stored description stays original.
+    cls = ai.classify_complaint(description + ("\n" + translation_en if translation_en else ""), category)
     final_category = cls["category"] if cls["category"] in CATEGORIES else category
 
     photo = None
@@ -68,14 +89,17 @@ def create(user, category, description, latitude, longitude, address=None, image
                 ["tracking_code", "user_id", "category", "description", "latitude", "longitude",
                  "address", "ward", "zone", "image_path", "image_hash", "proof_verified", "proof_check",
                  "status", "severity", "ai_category", "ai_confidence", "ai_summary", "ai_engine",
-                 "is_synthetic", "created_at", "updated_at"],
+                 "is_synthetic", "created_at", "updated_at", "original_language", "detected_language",
+                 "description_translation_en", "translation_engine", "assistant_engine"],
                 [tracking, user["id"], final_category, description, latitude, longitude,
                  (address or "").strip() or None, area["ward"], area["zone"],
                  photo["stored_name"] if photo else None, photo["image_hash"] if photo else None,
                  (1 if photo["passed"] else 0) if photo else None,
                  json.dumps({k: v for k, v in photo.items() if k != "stored_name"}) if photo else None,
                  "submitted", cls["severity"], cls["category"], cls.get("confidence"),
-                 cls["summary"], cls["engine"], 1 if is_synthetic else 0, ts, ts])
+                 cls["summary"], cls["engine"], 1 if is_synthetic else 0, ts, ts,
+                 language, detected, translation_en,
+                 "citizen_reviewed" if translation_en else None, assistant_engine])
             match = asset_svc.match_complaint(conn, cid, final_category, latitude, longitude)
             conn.execute("""INSERT INTO notifications (user_id, complaint_id, title, message, type, created_at)
                             VALUES (?,?,?,?, 'info', ?)""",
@@ -109,6 +133,7 @@ def create(user, category, description, latitude, longitude, address=None, image
             "engine": cls["engine"], "fallback_reason": cls.get("ai_error"),
         },
         "photo": evidence.public_check(photo) if photo else None,
+        "language": {"original": language, "detected": detected, "has_translation": bool(translation_en)},
         "area": area,
         "asset_match": {"asset_code": match["asset"]["asset_code"],
                         "type_label": asset_svc.type_label(match["asset"]["asset_type"]),

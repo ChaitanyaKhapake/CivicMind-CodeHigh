@@ -238,18 +238,117 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+-- ---------------------------------------------------------------------------
+-- Public data-source discovery (TinyFish). CANDIDATE EVIDENCE ONLY: nothing
+-- in these tables is an infrastructure record. Utility assets are created
+-- only through the utility import preview + admin confirmation.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS source_discovery_runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    authority     TEXT,
+    region        TEXT,
+    topic         TEXT,
+    data_types    TEXT,                       -- JSON list
+    query         TEXT NOT NULL,              -- query actually sent to TinyFish Search
+    provider      TEXT NOT NULL,              -- tinyfish_search
+    provider_mode TEXT NOT NULL,              -- live | mock
+    status        TEXT NOT NULL,              -- completed | failed
+    error_code    TEXT,
+    result_count  INTEGER NOT NULL DEFAULT 0,
+    requested_by  INTEGER REFERENCES users(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS source_candidates (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id        INTEGER NOT NULL REFERENCES source_discovery_runs(id) ON DELETE CASCADE,
+    url           TEXT NOT NULL,
+    title         TEXT,
+    snippet       TEXT,
+    site_name     TEXT,
+    result_date   TEXT,
+    position      INTEGER,
+    discovery_query TEXT,
+    provenance    TEXT,                       -- JSON {provider, provider_mode, query, retrieved_at}
+    review_status TEXT NOT NULL DEFAULT 'candidate',   -- candidate | selected | rejected
+    reviewed_by   INTEGER REFERENCES users(id),
+    reviewed_at   TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (run_id, url)
+);
+
+CREATE TABLE IF NOT EXISTS source_snapshots (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    candidate_id    INTEGER REFERENCES source_candidates(id) ON DELETE SET NULL,
+    method          TEXT NOT NULL,            -- tinyfish_fetch | tinyfish_agent
+    url             TEXT NOT NULL,
+    final_url       TEXT,
+    title           TEXT,
+    description     TEXT,
+    language        TEXT,
+    published_date  TEXT,
+    content_format  TEXT,
+    content_text    TEXT,                     -- capped; untrusted
+    content_chars   INTEGER NOT NULL DEFAULT 0,
+    content_truncated INTEGER NOT NULL DEFAULT 0,
+    content_sha256  TEXT,
+    fetch_status    TEXT NOT NULL,            -- ok | error
+    error_code      TEXT,
+    error_status    INTEGER,
+    warnings        TEXT,                     -- JSON list
+    provider_mode   TEXT NOT NULL,            -- live | mock
+    run_ref         TEXT,                     -- TinyFish agent run id, if any
+    requested_by    INTEGER REFERENCES users(id),
+    fetched_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    review_status   TEXT NOT NULL DEFAULT 'pending_review',  -- pending_review | reviewed | rejected
+    reviewed_by     INTEGER REFERENCES users(id),
+    reviewed_at     TEXT,
+    review_note     TEXT
+);
+
+CREATE TABLE IF NOT EXISTS source_agent_runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    url           TEXT NOT NULL,
+    status        TEXT NOT NULL,              -- COMPLETED | FAILED | ERROR
+    run_ref       TEXT,
+    error_code    TEXT,
+    provider_mode TEXT NOT NULL,
+    requested_by  INTEGER REFERENCES users(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- Officer-recorded coordination with utility operators (water-leak response
+-- etc.). Human-entered facts only: the app never operates a utility.
+CREATE TABLE IF NOT EXISTS incident_operator_updates (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    incident_id   INTEGER NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+    step          TEXT NOT NULL,
+    operator_org  TEXT,
+    contact_ref   TEXT,                       -- UtilityContact.contact_id after the utility merge
+    asset_ref     TEXT,                       -- UtilityAsset.asset_id after the utility merge
+    reference     TEXT,                       -- operator ticket / guidance reference
+    note          TEXT,
+    recorded_by   INTEGER NOT NULL REFERENCES users(id),
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 # Columns added after v2 — applied automatically to existing databases.
 MIGRATIONS = {
     "users":       [("token_version", "INTEGER NOT NULL DEFAULT 0"),
-                    ("is_active", "INTEGER NOT NULL DEFAULT 1")],
+                    ("is_active", "INTEGER NOT NULL DEFAULT 1"),
+                    ("preferred_language", "TEXT")],
     "complaints":  [("image_hash", "TEXT"), ("proof_verified", "INTEGER"), ("proof_check", "TEXT"),
                     ("resolution_proof_path", "TEXT"), ("resolution_proof_check", "TEXT"),
                     ("resolution_image_hash", "TEXT"), ("resolved_by", "INTEGER"),
                     ("resolved_at", "TEXT"), ("resolution_notes", "TEXT"),
                     ("resolution_plan", "TEXT"), ("eta_hours", "REAL"),
-                    ("tracking_code", "TEXT"), ("is_synthetic", "INTEGER NOT NULL DEFAULT 0")],
+                    ("tracking_code", "TEXT"), ("is_synthetic", "INTEGER NOT NULL DEFAULT 0"),
+                    # Multilingual intake: `description` is ALWAYS the citizen's original text.
+                    ("original_language", "TEXT"), ("detected_language", "TEXT"),
+                    ("description_translation_en", "TEXT"), ("translation_engine", "TEXT"),
+                    ("assistant_engine", "TEXT")],
     "incidents":   [("priority_factors", "TEXT"), ("asset_id", "INTEGER"),
                     ("last_report_at", "TEXT"), ("resolved_at", "TEXT"),
                     ("grouping_basis", "TEXT")],
@@ -277,6 +376,10 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_maint_asset ON asset_maintenance(asset_id, performed_at)",
     "CREATE INDEX IF NOT EXISTS ix_casset_asset ON complaint_assets(asset_id)",
     "CREATE INDEX IF NOT EXISTS ix_findings_status ON risk_findings(status)",
+    "CREATE INDEX IF NOT EXISTS ix_candidates_run ON source_candidates(run_id)",
+    "CREATE INDEX IF NOT EXISTS ix_snapshots_review ON source_snapshots(review_status, fetched_at)",
+    "CREATE INDEX IF NOT EXISTS ix_agent_runs_created ON source_agent_runs(created_at)",
+    "CREATE INDEX IF NOT EXISTS ix_operator_updates_incident ON incident_operator_updates(incident_id)",
 ]
 
 
@@ -400,7 +503,7 @@ def init_db():
         conn.execute("BEGIN IMMEDIATE")
         try:
             _migrate(conn)
-            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '3')")
+            conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '4')")
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")

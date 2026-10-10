@@ -470,6 +470,17 @@ ul.reasons li { margin: 1px 0; }
 .rules-help ul { padding-left: 18px; }
 .rules-help summary { cursor: pointer; font-weight: 700; }
 
+/* data sources, multilingual assistant, operator coordination */
+.notice.info { background: var(--blue-050); border: 1px solid #C9DAF6; color: #1D4A9A; }
+.content-pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; margin: 0;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px;
+  font: .8rem/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.url-cell { max-width: 460px; overflow-wrap: anywhere; }
+.assist-panel { border: 1px solid var(--line-2); border-radius: var(--radius-sm); padding: 14px; margin: 0 0 16px; }
+.check-row { display: flex; gap: 8px; align-items: flex-start; font-size: .84rem; margin-top: 8px; }
+.check-row input { width: auto; margin-top: 3px; }
+.lang-switch { display: inline-flex; align-items: center; gap: 8px; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .steps { grid-template-columns: repeat(3,1fr); }

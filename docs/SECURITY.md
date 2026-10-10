@@ -48,6 +48,39 @@ instead of 403 where revealing existence would leak information.
 | ALL | `/api/admin/*` | A | router-level dependency (reads included) | user creation logged |
 | POST | `/api/admin/reset` | A | demo database only + typed `RESET` | — |
 | GET | `/api/stream?token=` | own | SSE; token redacted from access logs | — |
+| POST | `/api/auth/preferences` | any | `preferred_language` ∈ en/hi/mr | — |
+| GET | `/api/assistant/capabilities` | any | states honestly whether translation/AI/speech are available | — |
+| POST | `/api/assistant/complaint` | C | suggestion only, **no persistence**; 20 calls / 10 min per user; output schema-validated | — |
+| GET/POST | `/api/incidents/{id}/operator-updates` | O · A | human-recorded operator coordination; deterministic prerequisites (409); closed incidents refused | activity |
+| GET | `/api/admin/data-sources/status` | A | provider mode and limits; **never** the key | — |
+| POST | `/api/admin/data-sources/discover` | A | TinyFish Search; results stored as candidates only | activity |
+| GET/POST | `/api/admin/data-sources/candidates[/{id}/review]` | A | — | — |
+| POST | `/api/admin/data-sources/fetch` | A | ≤ 10 admin-selected URLs; URL safety layer before any request; content stored as untrusted snapshot | activity |
+| GET/POST | `/api/admin/data-sources/snapshots[/{id}[/review]]` | A | failed fetches cannot be approved | activity |
+| GET | `/api/admin/data-sources/snapshots/{id}/source-metadata` | A | reviewed snapshots only (409 otherwise); provenance at best `official_unverified` | — |
+| POST | `/api/admin/data-sources/agent-extract` | A | **disabled by default**; domain must belong to a selected candidate or the allowlist; daily cap; read-only goal | activity |
+| GET | `/citizen`, `/officer`, `/admin`, `/login` | public | redirect to the page only; every API call behind it is still authorised | — |
+
+## TinyFish (public data-source discovery)
+
+- `TINYFISH_API_KEY` is read on the server only and sent only in the `X-API-Key` header to `https://*.tinyfish.ai`
+  (other hosts or plain http are refused). Provider redirects are not followed, so the header cannot leak.
+  The key never appears in responses, logs (host + status only), errors or the frontend.
+- **URL safety layer** (`services/tinyfish/url_safety.py`): only http/https; no embedded credentials; no
+  localhost, single-label, `.local`/`.internal`/… names; no private, loopback, link-local, CGNAT, reserved,
+  multicast or IPv4-mapped addresses; no numeric host spellings (`2130706433`, `0x7f.1`, `127.1`); host names
+  that resolve to a non-public address are refused. Redirect targets returned by Fetch are re-checked and
+  their content discarded if unsafe; a change of site is flagged.
+- Search results are *candidates*; fetched text is *untrusted evidence*. Neither writes infrastructure records.
+  Mock content (`TINYFISH_MOCK_MODE`) is labelled everywhere and gets provenance `synthetic_demo`.
+- Retries: Search only (GET); Fetch only when the service did not process the batch (429/503); Agent never.
+
+## Multilingual intake
+
+- `complaints.description` is always the citizen's original text. Translations are stored separately in
+  `description_translation_en`, only when the citizen ticked that they reviewed it, labelled `citizen_reviewed`.
+- No translation is produced without a configured AI provider; the API reports `translation_status: unavailable`.
+- Place names returned by the assistant are hints; the location is always the citizen's map pin.
 
 ## Other controls
 

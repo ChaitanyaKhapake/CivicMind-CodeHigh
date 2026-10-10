@@ -18,8 +18,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from auth import current_user, require_officer, is_staff
 from database import query, execute, db, now
 from services import clustering, ai, geo, risk, evidence, assets as asset_svc
-from services import actions as action_svc
-from routes.common import safe_json, raise_from
+from services import actions as action_svc, coordination
+from routes.common import safe_json, raise_from, language_view
 
 router = APIRouter(prefix="/api", tags=["incidents"])
 SORTS = {"priority": "priority_score DESC", "recent": "created_at DESC", "reports": "report_count DESC"}
@@ -141,6 +141,7 @@ def _staff_view(inc):
             "citizen_name": c["citizen_name"], "has_photo": bool(c["image_path"]),
             "photo_check": evidence.public_check(safe_json(c["proof_check"])),
             "asset_match": m, "is_synthetic": bool(c.get("is_synthetic")),
+            "language": language_view(c),
         })
     out["evidence"] = query("SELECT evidence_type, value, source FROM evidence WHERE incident_id=? ORDER BY id",
                             (inc["id"],))
@@ -165,6 +166,7 @@ def _staff_view(inc):
            ORDER BY detected_at DESC""", (inc["id"], a["id"] if a else -1))]
     out["timeline"] = query("""SELECT actor, action, detail, created_at FROM activity WHERE incident_id=?
                                ORDER BY created_at DESC, id DESC LIMIT 50""", (inc["id"],))
+    out["coordination"] = coordination.list_updates(inc["id"])
     out["view"] = "staff"
     return out
 
@@ -178,6 +180,7 @@ CITIZEN_TIMELINE = {
     "resolution_verified": "Marked resolved",
     "incident_reopened": "Incident reopened",
     "incident_closed": "Marked resolved",
+    "operator_crew_dispatched": "Repair crew dispatched",
 }
 
 

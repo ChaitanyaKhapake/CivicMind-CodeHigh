@@ -43,6 +43,29 @@ CATEGORY_KEYWORDS = {
     "Encroachment": ["encroach", "illegal", "hawker", "construction on footpath"],
 }
 
+# Hindi / Marathi (Devanagari) and common romanized terms, so the rule-based
+# fallback still classifies reports written in the civilian languages when no
+# AI provider is configured. Deliberately distinctive words only.
+CATEGORY_KEYWORDS_INDIC = {
+    "Water Leakage": ["लीक", "पाइप", "पाईप", "गळती", "रिसाव", "फुटली", "फट गई", "फट गया", "paani leak",
+                      "pani leak", "galti"],
+    "Low Water Pressure": ["पानी नहीं", "पाणी नाही", "पाणी येत नाही", "कम दबाव", "दाब कमी", "paani nahi",
+                           "pani nahi"],
+    "Garbage Accumulation": ["कचरा", "कूड़ा", "कूडा", "घाण", "गंदगी", "दुर्गंध", "बदबू", "kachra", "kachara",
+                             "kooda"],
+    "Pothole": ["खड्डा", "खड्डे", "गड्ढा", "गड्ढे", "khadda", "khadde", "gaddha"],
+    "Road Damage": ["रस्ता खराब", "सड़क टूटी", "सड़क खराब", "तुटलेला रस्ता", "rasta kharab", "sadak kharab"],
+    "Streetlight Failure": ["स्ट्रीट लाइट", "स्ट्रीटलाइट", "पथदिवा", "पथदिवे", "दिवा बंद", "बत्ती", "batti"],
+    "Drainage Issue": ["नाली", "गटार", "जलभराव", "पाणी साचले", "पाणी साचलं", "nali", "gatar"],
+    "Sewage Overflow": ["सीवर", "सांडपाणी", "मलजल", "ड्रेनेज"],
+    "Fallen Tree": ["पेड़ गिर", "झाड पडले", "झाड पडलं", "फांदी", "डाली", "ped gir"],
+    "Traffic Signal Failure": ["सिग्नल", "ट्रैफिक लाइट", "ट्रॅफिक"],
+    "Air/Noise Pollution": ["प्रदूषण", "धुआं", "धुआँ", "धूर", "धूल", "धूळ", "शोर", "ध्वनी"],
+    "Encroachment": ["अतिक्रमण", "अवैध", "बेकायदेशीर", "फेरीवाले", "फेरीवाला"],
+}
+URGENCY_WORDS_INDIC = ["तुरंत", "तत्काळ", "ताबडतोब", "खतरनाक", "धोकादायक", "दुर्घटना", "अपघात", "अस्पताल",
+                       "रुग्णालय", "शाळा", "स्कूल", "बच्चे", "जखमी", "घायल", "turant", "khatarnak"]
+
 # Base severity (1..5) by category
 CATEGORY_SEVERITY = {
     "Water Leakage": 4, "Low Water Pressure": 3, "Garbage Accumulation": 3,
@@ -153,7 +176,9 @@ def _error_kind(exc):
 def _rules_classify(description: str, hint: str = None):
     text = (description or "").lower()
     scores = {}
-    for cat, words in CATEGORY_KEYWORDS.items():
+    # Fixed iteration order keeps tie-breaking deterministic.
+    for cat in list(CATEGORY_KEYWORDS) + [c for c in CATEGORY_KEYWORDS_INDIC if c not in CATEGORY_KEYWORDS]:
+        words = CATEGORY_KEYWORDS.get(cat, []) + CATEGORY_KEYWORDS_INDIC.get(cat, [])
         s = sum(text.count(w) for w in words)
         if s:
             scores[cat] = s
@@ -163,10 +188,11 @@ def _rules_classify(description: str, hint: str = None):
     if category not in CATEGORIES and "Other" in CATEGORIES:
         category = "Other"
     severity = CATEGORY_SEVERITY.get(category, 2)
-    urgent = [w for w in URGENCY_WORDS if w in text]
+    urgent = [w for w in URGENCY_WORDS + URGENCY_WORDS_INDIC if w in text]
     if urgent:
         severity = min(5, severity + 1)
-    keywords = [w for w in CATEGORY_KEYWORDS.get(category, []) if w in text][:5]
+    keywords = [w for w in CATEGORY_KEYWORDS.get(category, []) + CATEGORY_KEYWORDS_INDIC.get(category, [])
+                if w in text][:5]
     return {
         "category": category,
         "severity": severity,

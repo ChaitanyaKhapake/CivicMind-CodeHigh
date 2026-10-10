@@ -55,9 +55,50 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The suite uses a fresh temporary database per test, never calls the live AI provider, and includes two
-browser-free frontend checks (API-path coverage and a Node-based XSS rendering test; skipped if Node is not
-installed). There is no automated real-browser test.
+The suite uses a fresh temporary database per test, never calls the live AI provider or TinyFish (both are
+mocked), and includes two browser-free frontend checks (API-path coverage and a Node-based XSS rendering
+test; skipped if Node is not installed). There is no automated real-browser test.
+
+### Portals
+
+`/citizen`, `/officer` and `/admin` open the Civilian, Officer and Admin portals (`citizen.html`,
+`dashboard.html`, `admin.html`). Sign-in sends each user to the portal of their **server-side** role; pages
+re-check the role with the server, and every API call is authorised on the server regardless of the page.
+
+### Public data-source discovery (TinyFish)
+
+Admins open **Data sources** to find official public sources (GIS pages, open-data catalogues, contact
+directories) with TinyFish Search, fetch up to 10 selected pages with TinyFish Fetch, read the extracted text
+and approve or reject each one. Approved sources provide provenance metadata for the utility import preview.
+Nothing found or fetched becomes an infrastructure record without that preview and an admin confirmation.
+
+1. Put your key in `.env` (never in code or Git): `TINYFISH_API_KEY=...`
+2. Restart; the server log shows `TinyFish: configured (live)`.
+3. Manual live smoke test: Admin → Data sources → search for e.g. *Pune Municipal Corporation / water supply
+   network*, select one result, *Fetch selected*, open it, approve it, *Show import source metadata*.
+   Check that results are tagged **Live**, not Mock.
+
+`TINYFISH_MOCK_MODE=true` returns fictional, clearly labelled results for demos without a key. The optional
+Agent (`TINYFISH_ENABLE_AGENT`) is off by default; it is read-only, limited to domains of selected candidates,
+capped per day and metered by TinyFish — check pricing first.
+
+### Reporting in English, Hindi or Marathi
+
+Citizens choose a language (saved to their profile); the report form's labels follow it. *Check my report*
+suggests a category, severity and follow-up questions (rule-based, or Sarvam AI when configured) and — only
+with an AI provider — an English translation the citizen can edit. The citizen applies suggestions explicitly;
+the translation is included only if they tick that they reviewed it. The original words are always what is
+stored as the description; the translation is kept separately for officers.
+
+### Utility operator coordination
+
+On an incident, officers record coordination with the utility operator: operator contacted, guidance received,
+isolation confirmed by the operator (or not required), crew dispatched. Isolation steps need a prior contact
+record; a dispatch needs the operator's isolation decision. CivicMind never operates valves, breakers or gas
+controls — it records what the authorised operator confirmed.
+
+See [docs/CIVICMIND_INTEGRATION_CONTRACT.md](docs/CIVICMIND_INTEGRATION_CONTRACT.md) for the shared contract
+with the Utility Network subsystem and [docs/INTEGRATION_REPORT.md](docs/INTEGRATION_REPORT.md) for status.
 
 ---
 
@@ -127,11 +168,12 @@ civicmind/
 │  ├─ config.py · database.py · auth.py
 │  ├─ manage.py             create-user / set-password / list-users
 │  ├─ seed_demo.py          builds the isolated demo database
-│  ├─ routes/               auth, complaints, incidents, actions, infrastructure, dashboard, admin, realtime, config
+│  ├─ routes/               auth, complaints, incidents, actions, infrastructure, dashboard, admin, realtime, config,
+│  │                        data_sources (TinyFish), assistant (multilingual), coordination (operator log)
 │  ├─ services/             complaints (intake), clustering, priority, assets, risk, actions (state machine),
-│  │                        evidence, ai, geo, bootstrap
+│  │                        evidence, ai, assistant, coordination, geo, bootstrap, tinyfish/ (client, URL safety, mock)
 │  └─ tests/                pytest suite
-├─ frontend/                index, citizen, dashboard, incident, map, assets (infrastructure), admin
+├─ frontend/                index, citizen, dashboard, incident, map, assets (infrastructure), admin, data-sources
 ├─ data/civicmind_config.json
 ├─ docs/                    SECURITY.md, DEMO_SCRIPT.md
 └─ run.bat · run.sh · run_demo.bat · run_demo.sh · Dockerfile · render.yaml · deploy/

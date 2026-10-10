@@ -72,6 +72,7 @@ function staffView(i) {
   <div class="detail-grid" style="margin-top:18px">
     <div>
       ${planCard(i)}
+      ${coordinationCard(i)}
       ${resolutionCard(i)}
       ${investigationCard(i)}
       <section class="card">
@@ -296,6 +297,7 @@ function reportsCard(i) {
             <span class="badge ${CM.sClass(c.status)}">${CM.esc(CM.statusText(c.status))}</span>${syntheticTag(c.is_synthetic)}</div>
           <div class="tiny muted">${CM.esc(c.category)} · ${CM.esc(c.citizen_name || 'Citizen')} · ${CM.esc(CM.timeAgo(c.created_at))} · severity ${CM.esc(c.severity)}/5</div>
           <p class="small" style="margin:4px 0">${CM.esc(c.description)}</p>
+          ${c.language && c.language.translation_en ? `<p class="tiny muted" style="margin:0 0 4px">EN (citizen-reviewed translation): ${CM.esc(c.language.translation_en)}</p>` : ''}
           ${c.asset_match ? `<div class="tiny">🏗️ ${CM.esc(c.asset_match.asset_code)} · ${CM.esc(Math.round(c.asset_match.distance_m || 0))} m ·
              <span class="muted">${CM.esc(c.asset_match.status)}</span>
              ${c.asset_match.status === 'auto' ? `<button class="link-btn" data-act="matchOk" data-id="${Number(c.id)}">confirm</button> ·
@@ -303,6 +305,39 @@ function reportsCard(i) {
         </div>
       </div>`).join('')}
     </div>
+  </section>`;
+}
+
+/* Operator coordination: facts an officer records about contact with the utility
+   operator. CivicMind never operates equipment; isolation is whatever the operator confirmed. */
+const ISOLATION_TEXT = { not_recorded: 'No operator contact recorded', awaiting_operator: 'Operator contacted — awaiting decision',
+  confirmed_by_operator: 'Isolation confirmed by operator', not_required: 'Operator: isolation not required' };
+function coordinationCard(i) {
+  const co = i.coordination;
+  if (!co) return '';
+  const st = co.isolation_status;
+  const cls = { confirmed_by_operator: 'resolved', not_required: 'resolved', awaiting_operator: 'pending' }[st] || '';
+  const meta = (u) => [u.reference && 'Ref ' + u.reference, u.contact_ref && 'Contact ' + u.contact_ref,
+                       u.asset_ref && 'Asset ' + u.asset_ref, u.note].filter(Boolean).map(x => CM.esc(x)).join(' · ');
+  return `
+  <section class="card" style="margin-bottom:18px">
+    <div class="card-h"><h3>Utility operator coordination</h3><span class="badge ${cls}">${CM.esc(ISOLATION_TEXT[st] || st)}</span></div>
+    <p class="tiny muted" style="margin-top:0">${CM.esc(co.safety_note)}</p>
+    <div class="timeline">${co.updates.map(u => `<div class="tl-item">
+        <div class="tl-t">${CM.esc(u.step_label)}${u.operator_org ? ' · ' + CM.esc(u.operator_org) : ''}</div>
+        ${meta(u) ? `<div class="tl-d">${meta(u)}</div>` : ''}
+        <div class="tl-d">${CM.esc(u.recorded_by_name || '')} · ${CM.esc(CM.fmtDate(u.created_at))}</div></div>`).join('')
+      || emptyState('Nothing recorded yet.')}</div>
+    ${i.status === 'resolved' ? '' : `<div class="divider"></div>
+    <div class="grid g2" style="gap:10px">
+      <div class="field"><label class="f" for="opStep">Step</label>
+        <select id="opStep">${co.steps.map(s => `<option value="${CM.esc(s.key)}">${CM.esc(s.label)}</option>`).join('')}</select></div>
+      <div class="field"><label class="f" for="opOrg">Operator organisation</label><input id="opOrg" maxlength="120"/></div>
+      <div class="field"><label class="f" for="opRef">Operator reference</label><input id="opRef" maxlength="120"/></div>
+      <div class="field"><label class="f" for="opContact">Contact record ID (optional)</label><input id="opContact" maxlength="64"/></div>
+    </div>
+    <div class="field"><label class="f" for="opNote">Note</label><input id="opNote" maxlength="500"/></div>
+    <button class="btn sm" data-act="opRecord">Record step</button>`}
   </section>`;
 }
 
@@ -415,6 +450,10 @@ async function onClick(e) {
     case 'dismiss': return run('…', () => post(`/api/risk/findings/${btn.dataset.id}/review`, { status: 'dismissed' }, 'Finding dismissed'));
     case 'matchOk': return run('…', () => post(`/api/complaints/${btn.dataset.id}/asset-match`, { status: 'confirmed' }, 'Asset match confirmed'));
     case 'matchNo': return run('…', () => post(`/api/complaints/${btn.dataset.id}/asset-match`, { status: 'rejected' }, 'Asset match removed'));
+    case 'opRecord': return run('Recording…', () => post(`/api/incidents/${inc.id}/operator-updates`, {
+      step: $('opStep').value, operator_org: $('opOrg').value.trim() || null, reference: $('opRef').value.trim() || null,
+      contact_ref: $('opContact').value.trim() || null, note: $('opNote').value.trim() || null,
+    }, 'Coordination step recorded'));
   }
 }
 

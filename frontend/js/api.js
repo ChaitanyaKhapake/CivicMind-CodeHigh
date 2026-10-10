@@ -116,6 +116,11 @@ const CM = (() => {
     const u = getUser();
     if (!u || !getToken()) { location.href = 'index.html'; return null; }
     if (roles && roles.length && !roles.includes(u.role)) { location.href = homeFor(u.role); return null; }
+    // The cached role only chooses which page to draw. Confirm it with the server so a
+    // changed role moves the user to the right portal (the API enforces access regardless).
+    api('/api/auth/me').then((me) => {
+      if (me && me.role && me.role !== u.role) { setSession(getToken(), { ...u, ...me }); location.href = homeFor(me.role); }
+    }).catch(() => { /* 401 is handled by api(); other errors are shown by the page */ });
     return u;
   }
   async function logout() { clearSession(); location.href = 'index.html'; }

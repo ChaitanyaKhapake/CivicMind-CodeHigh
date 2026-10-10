@@ -18,15 +18,16 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fastapi import FastAPI, Request  # noqa: E402
 from fastapi.exceptions import RequestValidationError  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.responses import JSONResponse  # noqa: E402
+from fastapi.responses import JSONResponse, RedirectResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 import config  # noqa: E402
 from config import FRONTEND_DIR, CITY_NAME, CITY_CENTER, CORS_ORIGINS, MAX_REQUEST_BYTES  # noqa: E402
 from database import init_db, query, is_demo_db  # noqa: E402
 from services import bootstrap, ai  # noqa: E402
+from services.tinyfish import provider_status  # noqa: E402
 from routes import (auth_routes, complaints, incidents, actions, dashboard, admin,  # noqa: E402
-                    realtime, config_routes, infrastructure)
+                    realtime, config_routes, infrastructure, data_sources, assistant, coordination)
 
 log = logging.getLogger("civicmind")
 
@@ -53,6 +54,10 @@ async def lifespan(_app):
     print(f"[CivicMind] Bootstrap: {result}")
     print("[CivicMind] AI engine: " + (f"Sarvam AI ({ai.SARVAM_CHAT_MODEL}) with rule-based fallback"
                                        if ai.ai_available() else "rule-based (set SARVAM_API_KEY to enable Sarvam AI)"))
+    tf = provider_status()
+    print("[CivicMind] TinyFish: " + {"live": "configured (live)", "mock": "MOCK MODE (fictional responses)"}.get(
+        tf["provider_mode"], "not configured (set TINYFISH_API_KEY for data-source discovery)")
+        + ("; Agent enabled" if tf["agent_enabled"] else ""))
     yield
 
 
@@ -169,8 +174,21 @@ def health():
 
 
 for r in (config_routes, auth_routes, complaints, incidents, actions, dashboard, admin,
-          realtime, infrastructure):
+          realtime, infrastructure, data_sources, assistant, coordination):
     app.include_router(r.router)
+
+# Short portal entry points. They only pick a page; every API call behind the
+# page is still authorised on the server from the user's current role.
+PORTAL_PATHS = {"/citizen": "/citizen.html", "/officer": "/dashboard.html", "/admin": "/admin.html",
+                "/login": "/index.html#login"}
+
+
+def _portal_redirect(target):
+    return lambda: RedirectResponse(target, status_code=307)
+
+
+for _path, _target in PORTAL_PATHS.items():
+    app.add_api_route(_path, _portal_redirect(_target), methods=["GET"], include_in_schema=False)
 
 # Frontend last so /api/* wins. NOTE: evidence photos are NOT served statically.
 if os.path.isdir(FRONTEND_DIR):

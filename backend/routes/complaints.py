@@ -32,6 +32,10 @@ class ComplaintIn(BaseModel):
     longitude: float
     address: str | None = Field(default=None, max_length=300)
     image: str | None = Field(default=None, max_length=MAX_IMAGE_CHARS)
+    # Optional multilingual metadata. `description` is always the citizen's own words.
+    language: str | None = Field(default=None, max_length=5)
+    translation_en: str | None = Field(default=None, max_length=2000)
+    assistant_engine: str | None = Field(default=None, max_length=20)
 
 
 class ResolveIn(BaseModel):
@@ -69,7 +73,8 @@ def _extras(c):
 def create_complaint(body: ComplaintIn, user: dict = Depends(require_citizen)):
     try:
         return intake.create(user, body.category, body.description, body.latitude, body.longitude,
-                             body.address, body.image)
+                             body.address, body.image, language=body.language,
+                             translation_en=body.translation_en, assistant_engine=body.assistant_engine)
     except intake.IntakeError as e:
         raise_from(e)
 

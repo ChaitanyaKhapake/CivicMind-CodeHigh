@@ -11,7 +11,7 @@ from auth import (authenticate, create_token, create_user, current_user, validat
                   validate_password, check_login_allowed, record_login_failure,
                   clear_login_failures, client_ip, hash_password, verify_password)
 from database import query, execute
-from config import ROLE_HOME, WARDS
+from config import ROLE_HOME, WARDS, CIVILIAN_LANGUAGES
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -35,10 +35,16 @@ class PasswordIn(BaseModel):
     new_password: str = Field(max_length=256)
 
 
+class PreferencesIn(BaseModel):
+    preferred_language: str = Field(max_length=5)
+
+
 def _session(user):
     return {
         "token": create_token(user["id"], user["role"], user.get("token_version", 0)),
-        "user": {k: user.get(k) for k in ("id", "name", "email", "role", "department", "ward")},
+        "user": {k: user.get(k) for k in ("id", "name", "email", "role", "department", "ward",
+                                          "preferred_language")},
+        # Portal is chosen from the server-side role, never from client input.
         "home": ROLE_HOME.get(user["role"], "/"),
     }
 
@@ -77,7 +83,15 @@ def register(body: RegisterIn, request: Request):
 
 @router.get("/me")
 def me(user: dict = Depends(current_user)):
-    return user
+    return user | {"home": ROLE_HOME.get(user["role"], "/")}
+
+
+@router.post("/preferences")
+def preferences(body: PreferencesIn, user: dict = Depends(current_user)):
+    if body.preferred_language not in CIVILIAN_LANGUAGES:
+        raise HTTPException(422, {"message": "Unsupported language.", "allowed": list(CIVILIAN_LANGUAGES)})
+    execute("UPDATE users SET preferred_language=? WHERE id=?", (body.preferred_language, user["id"]))
+    return {"ok": True, "preferred_language": body.preferred_language}
 
 
 @router.post("/logout-all")

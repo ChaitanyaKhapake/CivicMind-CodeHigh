@@ -199,6 +199,45 @@ SARVAM_TIMEOUT = float(_env("SARVAM_TIMEOUT", "25"))
 # Optional vision model for an *observation note* on photos (never a verdict).
 SARVAM_VISION_MODEL = _env("SARVAM_VISION_MODEL", "").strip()
 
+
+# ---------------------------------------------------------------------------
+# TinyFish (public data-source discovery). Server-side only: the key is never
+# sent to the browser, logged or returned by any endpoint.
+# ---------------------------------------------------------------------------
+def _env_int(key, default, lo, hi):
+    try:
+        val = int(_env(key, str(default)))
+    except ValueError:
+        val = default
+    return max(lo, min(hi, val))
+
+
+TINYFISH_API_KEY = _env("TINYFISH_API_KEY").strip()
+TINYFISH_SEARCH_URL = _env("TINYFISH_SEARCH_URL", "https://api.search.tinyfish.ai").strip()
+TINYFISH_FETCH_URL = _env("TINYFISH_FETCH_URL", "https://api.fetch.tinyfish.ai").strip()
+TINYFISH_AGENT_URL = _env("TINYFISH_AGENT_URL", "https://agent.tinyfish.ai").strip()
+TINYFISH_ENABLE_AGENT = _env_bool("TINYFISH_ENABLE_AGENT", False)
+TINYFISH_MOCK_MODE = _env_bool("TINYFISH_MOCK_MODE", False)
+TINYFISH_TIMEOUT_SECONDS = _env_int("TINYFISH_TIMEOUT_SECONDS", 30, 5, 150)
+# The Fetch batch ceiling is 120 s on TinyFish's side; allow a little more locally.
+TINYFISH_FETCH_TIMEOUT_SECONDS = _env_int("TINYFISH_FETCH_TIMEOUT_SECONDS", 150, 10, 180)
+TINYFISH_MAX_FETCH_URLS = _env_int("TINYFISH_MAX_FETCH_URLS", 10, 1, 10)   # provider limit: 10
+TINYFISH_MAX_SEARCH_RESULTS = _env_int("TINYFISH_MAX_SEARCH_RESULTS", 20, 1, 50)
+TINYFISH_MAX_CONTENT_CHARS = _env_int("TINYFISH_MAX_CONTENT_CHARS", 200_000, 1_000, 1_000_000)
+TINYFISH_CACHE_TTL_SECONDS = _env_int("TINYFISH_CACHE_TTL_SECONDS", 900, 0, 86_400)
+TINYFISH_AGENT_MAX_DURATION_SECONDS = _env_int("TINYFISH_AGENT_MAX_DURATION_SECONDS", 120, 10, 600)
+# max_steps is beta-gated by TinyFish (403 on non-beta accounts); only sent when set.
+TINYFISH_AGENT_MAX_STEPS = _env_int("TINYFISH_AGENT_MAX_STEPS", 0, 0, 500)
+TINYFISH_AGENT_DAILY_LIMIT = _env_int("TINYFISH_AGENT_DAILY_LIMIT", 5, 0, 200)
+# Extra domains an admin may send the Agent to (besides domains of selected candidates).
+TINYFISH_AGENT_ALLOWED_DOMAINS = [d.strip().lower().lstrip(".") for d in
+                                  _env("TINYFISH_AGENT_ALLOWED_DOMAINS", "").split(",") if d.strip()]
+# Resolve hostnames and refuse any that point at private/internal addresses.
+TINYFISH_RESOLVE_DNS = _env_bool("TINYFISH_RESOLVE_DNS", True)
+
+# Languages offered to civilians (the AI provider may support fewer — see services/assistant.py).
+CIVILIAN_LANGUAGES = {"en": "English", "hi": "हिन्दी (Hindi)", "mr": "मराठी (Marathi)"}
+
 # Role -> home dashboard
 ROLE_HOME = {
     "citizen": "/citizen.html",

@@ -4,7 +4,8 @@
 const NAV_LINKS = {
   citizen: [['citizen.html', 'Report & track'], ['map.html', 'My map']],
   officer: [['dashboard.html', 'Operations'], ['map.html', 'City map'], ['assets.html', 'Infrastructure']],
-  admin:   [['admin.html', 'Admin'], ['dashboard.html', 'Operations'], ['map.html', 'City map'], ['assets.html', 'Infrastructure']],
+  admin:   [['admin.html', 'Admin'], ['data-sources.html', 'Data sources'], ['dashboard.html', 'Operations'],
+            ['map.html', 'City map'], ['assets.html', 'Infrastructure']],
 };
 
 function renderNav(active, user) {

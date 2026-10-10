@@ -50,7 +50,15 @@ def owner_complaint(c, incident=None, asset=None, officer_name=None):
         "resolution_notes": c.get("resolution_notes"), "resolved_by_name": officer_name,
         "incident": incident, "asset": asset, "next_step": next_step(c["status"]),
         "is_synthetic": bool(c.get("is_synthetic")),
+        "language": language_view(c),
     }
+
+
+def language_view(c):
+    """Original language plus a separately stored, citizen-reviewed English translation."""
+    return {"original": c.get("original_language"), "detected": c.get("detected_language"),
+            "translation_en": c.get("description_translation_en"),
+            "translation_source": c.get("translation_engine"), "assistant_engine": c.get("assistant_engine")}
 
 
 def staff_complaint(c, viewer, incident=None, asset=None, officer_name=None):
