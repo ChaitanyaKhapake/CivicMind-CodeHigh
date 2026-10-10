@@ -11,10 +11,11 @@
 <link rel="stylesheet" href="css/style.css"/>
 </head>
 <body class="landing">
+<div class="scroll-progress" aria-hidden="true"></div>
 
 <header class="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""/> Civic<span class="brand-accent">Mind</span></a>
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt=""/><span class="brand-name">Civic<span class="brand-accent">Mind</span></span></a>
     <nav class="nav-links land-links" aria-label="Sections">
       <a href="#how">How it works</a><a href="#infra">Infrastructure</a><a href="#ai">AI assistance</a><a href="#trust">Trust</a>
     </nav>
@@ -26,27 +27,61 @@
 </header>
 
 <section class="hero">
+  <div class="hero-bg" aria-hidden="true">
+    <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+    <svg class="hero-net" viewBox="0 0 1200 620" preserveAspectRatio="xMidYMid slice">
+      <g class="streets">
+        <path d="M-20 140 C 260 120, 520 170, 1220 120"/><path d="M-20 330 C 300 300, 700 360, 1220 310"/>
+        <path d="M-20 520 C 380 500, 760 560, 1220 500"/><path d="M180 -20 C 200 200, 160 420, 210 640"/>
+        <path d="M520 -20 C 540 220, 500 420, 560 640"/><path d="M860 -20 C 880 200, 840 420, 900 640"/>
+        <path d="M1080 -20 C 1060 260, 1110 420, 1060 640"/>
+      </g>
+      <g class="pipes">
+        <path class="p water" pathLength="1" d="M-20 134 C 260 114, 520 164, 1220 114"/>
+        <path class="p sewer" pathLength="1" d="M-20 340 C 300 310, 700 370, 1220 320"/>
+        <path class="p power" pathLength="1" d="M190 -20 C 210 200, 170 420, 220 640"/>
+        <path class="p water" pathLength="1" d="M528 -20 C 548 220, 508 420, 568 640"/>
+        <path class="p gas" pathLength="1" d="M-20 528 C 380 508, 760 568, 1220 508"/>
+        <path class="p telecom" pathLength="1" d="M870 -20 C 890 200, 850 420, 910 640"/>
+        <path class="p power" pathLength="1" d="M1072 -20 C 1052 260, 1102 420, 1052 640"/>
+      </g>
+      <g class="flow">
+        <circle r="5" class="dot water"><animateMotion dur="7s" repeatCount="indefinite" path="M-20 134 C 260 114, 520 164, 1220 114"/></circle>
+        <circle r="5" class="dot water"><animateMotion dur="9s" begin="2s" repeatCount="indefinite" path="M528 -20 C 548 220, 508 420, 568 640"/></circle>
+        <circle r="4" class="dot sewer"><animateMotion dur="11s" repeatCount="indefinite" path="M-20 340 C 300 310, 700 370, 1220 320"/></circle>
+        <circle r="4" class="dot power"><animateMotion dur="5s" repeatCount="indefinite" path="M190 -20 C 210 200, 170 420, 220 640"/></circle>
+        <circle r="4" class="dot telecom"><animateMotion dur="6s" begin="1s" repeatCount="indefinite" path="M870 -20 C 890 200, 850 420, 910 640"/></circle>
+        <circle r="4" class="dot gas"><animateMotion dur="12s" begin="3s" repeatCount="indefinite" path="M-20 528 C 380 508, 760 568, 1220 508"/></circle>
+      </g>
+      <g class="nodes">
+        <circle cx="197" cy="129" r="7"/><circle cx="534" cy="152" r="7"/><circle cx="869" cy="126" r="7"/>
+        <circle cx="545" cy="345" r="7"/><circle cx="868" cy="330" r="7"/><circle cx="207" cy="320" r="7"/>
+      </g>
+      <g class="ping"><circle cx="545" cy="345" r="10"/><circle cx="545" cy="345" r="10" class="late"/></g>
+      <g class="ping amber"><circle cx="207" cy="320" r="10"/><circle cx="207" cy="320" r="10" class="late"/></g>
+    </svg>
+  </div>
   <div class="wrap hero-grid">
     <div>
-      <span class="eyebrow-pill">Civic operations intelligence</span>
-      <h1>From civic reports to actionable city intelligence</h1>
-      <p class="lede">A workspace for residents and municipal teams to report problems, connect them to recorded
+      <span class="eyebrow-pill rise" style="--d:0">Civic operations intelligence</span>
+      <h1 class="rise" style="--d:1">From civic reports to <span class="grad-text">actionable city intelligence</span></h1>
+      <p class="lede rise" style="--d:2">A workspace for residents and municipal teams to report problems, connect them to recorded
         infrastructure, coordinate the response with the right operator, and track each case to a verified outcome.</p>
-      <div class="row wrap-row" style="margin-top:20px">
-        <a class="btn primary" href="#login" id="ctaReport" data-tab="register">Report a civic issue</a>
+      <div class="row wrap-row rise" style="margin-top:20px;--d:3">
+        <a class="btn primary btn-glow" href="#login" id="ctaReport" data-tab="register">Report a civic issue <span class="arrow" aria-hidden="true">→</span></a>
         <a class="btn" href="#infra">See the infrastructure workspace</a>
       </div>
-      <div class="stat-strip" style="margin-top:28px" aria-live="polite">
+      <div class="stat-strip rise" style="margin-top:28px;--d:4" aria-live="polite">
         <div class="s"><div class="n" id="sComplaints">—</div><div class="l">Citizen reports</div></div>
         <div class="s"><div class="n" id="sIncidents">—</div><div class="l">Incidents</div></div>
         <div class="s"><div class="n" id="sAssets">—</div><div class="l">Mapped assets</div></div>
-        <div class="s"><div class="n" id="sAI">—</div><div class="l">Classification engine</div></div>
+        <div class="s" title="Sarvam AI classifies reports and handles Hindi/Marathi; TinyFish discovers public infrastructure data sources for administrators."><div class="n" id="sAI">TinyFish + Sarvam AI</div><div class="l">AI &amp; data engines</div></div>
       </div>
-      <p class="tiny muted" style="margin-top:8px">Live counts from this installation.</p>
+      <p class="tiny muted rise" style="margin-top:8px;--d:5"><span class="live-dot" aria-hidden="true"></span>Live counts from this installation.</p>
       <p class="tiny muted" id="demoNote" hidden>Demo database: every record shown is fictional and labelled synthetic.</p>
     </div>
 
-    <div class="auth-card" id="login">
+    <div class="auth-card rise-card" id="login">
       <div class="notice warn" id="expiredNote" hidden>Your session expired. Please sign in again.</div>
       <div class="tabs" role="tablist">
         <button type="button" class="active" id="tabLogin" role="tab" aria-selected="true">Sign in</button>
@@ -87,17 +122,17 @@
 <main>
   <section class="land-section" id="how">
     <div class="wrap">
-      <div class="section-intro center">
+      <div class="section-intro center reveal">
         <span class="eyebrow-pill">How it works</span>
         <h2>Report · Connect · Respond</h2>
         <p class="muted">One accountable path from a resident's report to a verified outcome. Every step records who acted and when.</p>
       </div>
       <div class="grid g3">
-        <article class="feature-card"><div class="step-no">01</div><h3>Report</h3>
+        <article class="feature-card reveal" style="--i:0"><div class="step-no">01</div><h3>Report</h3>
           <p class="small muted">Residents describe the problem in English, हिन्दी or मराठी, pin the location and optionally add a photo. They get a reference and a private tracking code.</p></article>
-        <article class="feature-card"><div class="step-no">02</div><h3>Connect</h3>
+        <article class="feature-card reveal" style="--i:1"><div class="step-no">02</div><h3>Connect</h3>
           <p class="small muted">Related reports are grouped into incidents, matched to compatible assets nearby, and connected to the recorded utility network — with reasons shown for every match.</p></article>
-        <article class="feature-card"><div class="step-no">03</div><h3>Respond</h3>
+        <article class="feature-card reveal" style="--i:2"><div class="step-no">03</div><h3>Respond</h3>
           <p class="small muted">Officers trace the network, contact the authorised operator, approve a plan, record progress and close the case only with accepted proof.</p></article>
       </div>
     </div>
@@ -105,7 +140,7 @@
 
   <section class="land-section alt" id="infra">
     <div class="wrap land-split">
-      <div>
+      <div class="reveal">
         <span class="eyebrow-pill teal">Underground utility intelligence</span>
         <h2>Click a pipe. See what it connects to.</h2>
         <p class="muted">Officers select a water main, sewer, cable or gas line on the map and see the network as it is recorded — not as it looks.</p>
@@ -117,7 +152,7 @@
           <li><strong>Lines crossing on a map are never treated as a connection.</strong></li>
         </ul>
       </div>
-      <figure class="preview-card" aria-label="Illustration of a utility trace">
+      <figure class="preview-card reveal trace-anim" style="--i:1" aria-label="Illustration of a utility trace">
         <div class="row spread"><strong class="small">Water main WM-DEMO-03 · upstream trace</strong><span class="badge synthetic">Illustration</span></div>
         <svg viewBox="0 0 420 230" role="img" aria-label="A fictional water network: a source feeds a main through two valves to the segment where a leak was reported.">
           <rect x="0" y="0" width="420" height="230" rx="10" fill="#F5F8FC"/>
@@ -125,12 +160,13 @@
             <line x1="0" y1="70" x2="420" y2="62"/><line x1="0" y1="170" x2="420" y2="182"/>
             <line x1="120" y1="0" x2="138" y2="230"/><line x1="300" y1="0" x2="290" y2="230"/>
           </g>
-          <polyline points="40,40 130,66 220,110 300,150" fill="none" stroke="#2D63D8" stroke-width="6" stroke-linecap="round"/>
+          <polyline points="40,40 130,66 220,110 300,150" fill="none" stroke="#2D63D8" stroke-width="6" stroke-linecap="round" class="trace-line" pathLength="1"/>
           <polyline points="220,110 250,200" fill="none" stroke="#9FB6E8" stroke-width="4" stroke-linecap="round"/>
           <polyline points="300,150 390,140" fill="none" stroke="#9FB6E8" stroke-width="4" stroke-linecap="round" stroke-dasharray="6 6"/>
           <rect x="28" y="28" width="24" height="24" rx="5" fill="#0F9D91"/>
-          <rect x="122" y="58" width="16" height="16" transform="rotate(45 130 66)" fill="#fff" stroke="#0F9D91" stroke-width="3"/>
-          <rect x="212" y="102" width="16" height="16" transform="rotate(45 220 110)" fill="#fff" stroke="#0F9D91" stroke-width="3"/>
+          <rect x="122" y="58" width="16" height="16" transform="rotate(45 130 66)" fill="#fff" stroke="#0F9D91" stroke-width="3" class="valve v1"/>
+          <rect x="212" y="102" width="16" height="16" transform="rotate(45 220 110)" fill="#fff" stroke="#0F9D91" stroke-width="3" class="valve v2"/>
+          <circle cx="285" cy="142" r="9" fill="none" stroke="#C93C3C" stroke-width="2" class="leak-ring"/>
           <circle cx="285" cy="142" r="9" fill="#C93C3C" stroke="#fff" stroke-width="3"/>
           <g font-family="Plus Jakarta Sans, sans-serif" font-size="11" fill="#172B4D">
             <text x="58" y="34">Source (fictional)</text><text x="140" y="56">Valve V-01</text><text x="230" y="102">Valve V-02</text>
@@ -144,17 +180,17 @@
 
   <section class="land-section" id="ai">
     <div class="wrap">
-      <div class="section-intro center">
+      <div class="section-intro center reveal">
         <span class="eyebrow-pill">AI assistance</span>
         <h2>Help with the work, not decisions about it</h2>
         <p class="muted">AI suggests, explains and drafts. Deterministic code computes distances, network paths, permissions and workflow rules, and people approve every consequential step.</p>
       </div>
       <div class="grid g3">
-        <article class="feature-card"><h3>Multilingual reporting</h3>
+        <article class="feature-card reveal" style="--i:0"><h3>Multilingual reporting</h3>
           <p class="small muted">Category suggestions and follow-up questions in English, Hindi and Marathi. The citizen's own words are always kept; translations are stored separately after the citizen reviews them.</p></article>
-        <article class="feature-card"><h3>Utility Copilot</h3>
+        <article class="feature-card reveal" style="--i:1"><h3>Utility Copilot</h3>
           <p class="small muted">Officers ask "where does this pipe connect?" or "which valves are upstream?". Answers come from the recorded network and cite asset IDs, or say what data is missing.</p></article>
-        <article class="feature-card"><h3>Incident briefings</h3>
+        <article class="feature-card reveal" style="--i:2"><h3>Incident briefings</h3>
           <p class="small muted">A structured summary of what was reported, the candidate assets, history and data gaps — facts kept apart from hypotheses, with a coordination checklist.</p></article>
       </div>
       <p class="tiny muted center" style="margin-top:14px">When no AI provider is available, rule-based classification and record-based answers keep every workflow running.</p>
@@ -163,18 +199,18 @@
 
   <section class="land-section alt" id="portals">
     <div class="wrap">
-      <div class="section-intro center"><span class="eyebrow-pill">Three portals, one record</span><h2>The right view for each role</h2></div>
+      <div class="section-intro center reveal"><span class="eyebrow-pill">Three portals, one record</span><h2>The right view for each role</h2></div>
       <div class="grid g3">
-        <article class="feature-card"><h3>Citizen</h3><p class="small muted">Report an issue, follow its status in plain language, get notified of changes. Only your own reports are visible to you.</p></article>
-        <article class="feature-card"><h3>Officer</h3><p class="small muted">Priority queue, live map with utility layers, network tracing, operator coordination, action plans, evidence and verification.</p></article>
-        <article class="feature-card"><h3>Administrator</h3><p class="small muted">Users and roles, infrastructure data sources and validated imports, public-data discovery, data quality and audit history.</p></article>
+        <article class="feature-card reveal" style="--i:0"><h3>Citizen</h3><p class="small muted">Report an issue, follow its status in plain language, get notified of changes. Only your own reports are visible to you.</p></article>
+        <article class="feature-card reveal" style="--i:1"><h3>Officer</h3><p class="small muted">Priority queue, live map with utility layers, network tracing, operator coordination, action plans, evidence and verification.</p></article>
+        <article class="feature-card reveal" style="--i:2"><h3>Administrator</h3><p class="small muted">Users and roles, infrastructure data sources and validated imports, public-data discovery, data quality and audit history.</p></article>
       </div>
     </div>
   </section>
 
   <section class="land-section" id="trust">
     <div class="wrap land-split">
-      <div>
+      <div class="reveal">
         <span class="eyebrow-pill">Trust and accountability</span>
         <h2>Honest about what the data shows</h2>
         <p class="muted">Every infrastructure record carries its provenance, and the interface says when something is unverified or fictional.</p>
@@ -183,7 +219,7 @@
           <span class="chip static">Planned / design</span><span class="chip static">Approximate</span><span class="chip static">Synthetic demo</span>
         </div>
       </div>
-      <ul class="check-list">
+      <ul class="check-list reveal" style="--i:1">
         <li>Access is enforced on the server for every request; menus only mirror it.</li>
         <li>Citizens never see other residents' details or underground network records.</li>
         <li>CivicMind records operator decisions. It never operates valves, switches or gas controls.</li>
@@ -202,6 +238,7 @@
 </footer>
 
 <script src="js/api.js"></script>
+<script src="js/landing-motion.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

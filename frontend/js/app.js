@@ -57,10 +57,11 @@ $('registerForm').addEventListener('submit', async (e) => {
 
   try {
     const h = await CM.api('/api/health');
-    $('sComplaints').textContent = CM.num(h.complaints);
-    $('sIncidents').textContent = CM.num(h.incidents);
-    $('sAssets').textContent = CM.num(h.assets);
-    $('sAI').textContent = h.ai_enabled ? 'Sarvam AI + rules' : 'Rule-based';
+    const stat = (id, n) => (window.CMMotion ? CMMotion.countUp($(id), n) : ($(id).textContent = CM.num(n)));
+    stat('sComplaints', h.complaints);
+    stat('sIncidents', h.incidents);
+    stat('sAssets', h.assets);
+    $('sAI').textContent = 'TinyFish + Sarvam AI';
     $('demoNote').hidden = !h.demo_database;
   } catch { /* stats are decorative; the form still works */ }
 

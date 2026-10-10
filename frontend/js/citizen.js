@@ -467,8 +467,9 @@ function complaintCard(c) {
       <p class="small" style="margin:6px 0"><strong>${CM.esc(I18N.t('next'))}:</strong> ${CM.esc(nextText(c.status, c.next_step))}</p>
       ${estimateLine(c.estimate)}
       ${c.voice ? `<p class="tiny muted" style="margin:4px 0">🎤 ${CM.esc(I18N.t('card_voice'))} ${c.voice.transcript ? '— ' + CM.esc(c.voice.transcript) : '(' + CM.esc(c.voice.transcription_status) + ')'}</p>` : ''}
-      ${(c.resolution_photos || []).length ? `<div class="row wrap-row" style="gap:6px;margin:6px 0">${c.resolution_photos.map(p =>
-        `<img class="thumb sm" alt="${CM.esc(p.label)}" title="${CM.esc(p.label)}" data-auth-src="${CM.esc(p.url)}"/>`).join('')}</div>` : ''}
+      ${(c.resolution_photos || []).length ? `<div class="res-photos">${c.resolution_photos.map(p =>
+        `<figure><img class="thumb" alt="${CM.esc(p.label)}" title="${CM.esc(p.label)}" data-auth-src="${CM.esc(p.url)}"/>
+          <figcaption>✅ ${CM.esc(p.label)} · tap to enlarge</figcaption></figure>`).join('')}</div>` : ''}
       ${(c.history || []).length ? `<details class="small"><summary>${CM.esc(I18N.t('history'))} (${c.history.length})</summary>
         <div class="timeline" style="margin-top:6px">${c.history.map(h => `<div class="tl-item"><div class="tl-t">${CM.esc(h.label)}</div>
           <div class="tl-d">${CM.esc(CM.fmtDate(h.at))}</div></div>`).join('')}</div></details>` : ''}

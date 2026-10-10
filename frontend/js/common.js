@@ -17,7 +17,7 @@ function renderNav(active, user) {
   nav.innerHTML = `
     <div class="wrap nav-inner">
       <a class="brand" href="${CM.homeFor(user.role)}">
-        <img src="assets/logo.svg" alt=""/> Civic<span class="brand-accent">Mind</span>
+        <img src="assets/logo.svg" alt=""/><span class="brand-name">Civic<span class="brand-accent">Mind</span></span>
       </a>
       <button class="btn ghost sm nav-toggle" id="navToggle" aria-expanded="false" aria-controls="navLinks">☰ Menu</button>
       <nav class="nav-links" id="navLinks">${links}</nav>

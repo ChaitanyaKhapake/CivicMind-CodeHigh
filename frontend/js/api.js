@@ -73,10 +73,79 @@ const CM = (() => {
       const blob = await res.blob();
       img.src = URL.createObjectURL(blob);
       img.classList.remove('img-missing');
+      if (img.matches && img.matches('img.thumb')) {      // reachable by keyboard; Enter opens the viewer
+        img.tabIndex = 0; img.setAttribute('role', 'button');
+        img.setAttribute('aria-label', (img.alt || 'Photo') + ' — open full size');
+      }
     } catch {
       img.alt = 'Photo unavailable'; img.classList.add('img-missing');
     }
   }
+  /* ---------- photo viewer: tap any loaded thumbnail to see it full size ---------- */
+  let lb = null, lbList = [], lbIndex = 0, lbReturn = null;
+  function lightboxShow(i) {
+    lbIndex = (i + lbList.length) % lbList.length;
+    const img = lbList[lbIndex];
+    lb.querySelector('img').src = img.src;
+    lb.querySelector('img').alt = img.alt || 'Photo';
+    lb.querySelector('.lb-cap').textContent = (img.getAttribute('title') || img.alt || '') +
+      (lbList.length > 1 ? `  (${lbIndex + 1} / ${lbList.length})` : '');
+    lb.querySelectorAll('.lb-nav').forEach(b => { b.hidden = lbList.length < 2; });
+  }
+  function lightboxClose() {
+    if (!lb) return;
+    lb.remove(); lb = null; document.removeEventListener('keydown', lightboxKeys);
+    if (lbReturn) lbReturn.focus();
+  }
+  function lightboxKeys(e) {
+    if (e.key === 'Escape') lightboxClose();
+    else if (e.key === 'ArrowRight') lightboxShow(lbIndex + 1);
+    else if (e.key === 'ArrowLeft') lightboxShow(lbIndex - 1);
+  }
+  function openLightbox(img) {
+    const group = img.closest('.media-row, .row, .complaint-body, article, .report-item') || document.body;
+    lbList = [...group.querySelectorAll('img.thumb')].filter(x => x.src && !x.classList.contains('img-missing'));
+    if (!lbList.includes(img)) lbList = [img];
+    lbReturn = img;
+    lb = document.createElement('div');
+    lb.className = 'lightbox';
+    lb.setAttribute('role', 'dialog'); lb.setAttribute('aria-modal', 'true'); lb.setAttribute('aria-label', 'Photo viewer');
+    lb.innerHTML = `<button type="button" class="lb-close" aria-label="Close">✕</button>
+      <button type="button" class="lb-nav lb-prev" aria-label="Previous photo">‹</button>
+      <figure><img alt=""/><figcaption class="lb-cap"></figcaption></figure>
+      <button type="button" class="lb-nav lb-next" aria-label="Next photo">›</button>`;
+    lb.addEventListener('click', (e) => {
+      if (e.target.closest('.lb-prev')) lightboxShow(lbIndex - 1);
+      else if (e.target.closest('.lb-next')) lightboxShow(lbIndex + 1);
+      else if (e.target.closest('.lb-close') || e.target === lb) lightboxClose();
+    });
+    let x0 = null;      // swipe on phones
+    lb.addEventListener('touchstart', (e) => { x0 = e.touches[0].clientX; }, { passive: true });
+    lb.addEventListener('touchend', (e) => {
+      if (x0 === null) return;
+      const dx = e.changedTouches[0].clientX - x0; x0 = null;
+      if (Math.abs(dx) > 50) lightboxShow(lbIndex + (dx < 0 ? 1 : -1));
+    });
+    document.body.appendChild(lb);
+    document.addEventListener('keydown', lightboxKeys);
+    lightboxShow(lbList.indexOf(img));
+    lb.querySelector('.lb-close').focus();
+  }
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('click', (e) => {
+      const img = e.target && e.target.closest ? e.target.closest('img.thumb') : null;
+      if (img && img.src && !img.classList.contains('img-missing') && !img.closest('.lightbox')) {
+        e.preventDefault(); openLightbox(img);
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      const img = e.target && e.target.matches && e.target.matches('img.thumb') ? e.target : null;
+      if (img && (e.key === 'Enter' || e.key === ' ') && img.src && !img.classList.contains('img-missing')) {
+        e.preventDefault(); openLightbox(img);
+      }
+    });
+  }
+
   /** Thumbnails for a report's photos and videos (private files: call hydrateImages afterwards). */
   function mediaThumbs(c, size = '') {
     const list = Array.isArray(c.media) ? c.media.slice() : [];
