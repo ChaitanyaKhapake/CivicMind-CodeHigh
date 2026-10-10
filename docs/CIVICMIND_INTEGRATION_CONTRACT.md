@@ -244,6 +244,27 @@ record. Only an officer/admin can write them; no AI path writes them; the app ne
 After the Astra merge, `contact_ref` may carry a `UtilityContact.contact_id` and `asset_ref` a
 `UtilityAsset.asset_id`.
 
+### B7a. Utility subsystem built on `claude-platform` (2026-10-10, owner instruction)
+
+The owner's later master prompt asked Claude to implement the Utility Network Intelligence subsystem directly.
+It now exists on `claude-platform` at the Astra-owned paths named in Part A (`backend/services/utility_network/`,
+`backend/routes/utility_network.py`, `frontend/js/utility-network.js`, `backend/tests/test_utility_network.py`)
+and follows Part A plus proposals P1, P5 and P7:
+
+- Tables `utility_assets`, `utility_connections`, `utility_contacts`, `utility_maintenance`, `utility_data_sources`,
+  `utility_import_jobs`, `utility_findings`, `incident_utility_assets` via idempotent `init_schema(conn)`.
+- Canonical endpoints implemented as written: `GET /api/utility/assets[/{asset_id}[/trace|/history]]`,
+  `GET /api/incidents/{incident_id}/utility-context`, `POST /api/utility/import/preview|confirm`.
+  Additions: `/api/utility/meta`, `/assets/{id}/isolation`, `/assets/{id}/contacts`, `/assets/{id}/copilot`,
+  `/api/utility/findings*`, `/api/utility/import/jobs`, `/api/utility/records/verify`,
+  `/api/incidents/{id}/utility-assets/{asset_id}/review`, `/api/incidents/{id}/briefing`.
+- `max_hops` default is 10 (cap 25) rather than the example 6: the synthetic source is 7 hops from the demo leak,
+  and real distribution networks are deeper. Reaching the limit is always reported.
+- Point assets act as network nodes (no separate nodes table); `asset_id` is the public string identifier.
+
+If an Astra branch is still delivered, compare it against this implementation before merging; do not merge two
+utility subsystems.
+
 ### B8. Astra handoff checklist (reviewed by Claude at C2)
 
 - [ ] Only Astra-owned paths changed (`backend/services/utility_network/`, `backend/routes/utility_network.py`,

@@ -28,17 +28,22 @@ OPEN_INC = "status != 'resolved'"
 
 
 def _linked():
-    """(asset row, incident row) pairs for open incidents with candidate/confirmed links."""
+    """(asset row, incident row) pairs, one focus per open incident: the officer-confirmed assets, or —
+    if none is confirmed yet — only the single nearest candidate (lines before points). Rules never fire
+    for every asset that merely happens to be nearby."""
     pairs = []
     for i in query(f"SELECT * FROM incidents WHERE {OPEN_INC}"):
         matching.refresh(i)
-    rows = query(f"""SELECT iua.asset_id AS pk, iua.status AS link_status, i.* FROM incident_utility_assets iua
-                     JOIN incidents i ON i.id=iua.incident_id
-                     WHERE iua.status != 'rejected' AND i.{OPEN_INC}""")
-    for r in rows:
-        a = registry.get_row_by_pk(r["pk"])
-        if a:
-            pairs.append((a, r))
+        links = query("""SELECT iua.asset_id AS pk, iua.status, iua.distance_m, a.geometry_type
+                         FROM incident_utility_assets iua JOIN utility_assets a ON a.id=iua.asset_id
+                         WHERE iua.incident_id=? AND iua.status != 'rejected'""", (i["id"],))
+        confirmed = [x for x in links if x["status"] == "confirmed"]
+        focus = confirmed or sorted(links, key=lambda x: (x["distance_m"] if x["distance_m"] is not None else 1e9,
+                                                          x["geometry_type"] != "LineString"))[:1]
+        for x in focus:
+            a = registry.get_row_by_pk(x["pk"])
+            if a:
+                pairs.append((a, dict(i, link_status=x["status"])))
     return pairs
 
 

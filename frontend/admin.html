@@ -67,13 +67,51 @@
     </aside>
   </div>
 
-  <div class="section-title"><h2>Infrastructure data</h2><span class="grow"></span>
+  <div class="section-title"><h2>Utility network data</h2><span class="grow"></span>
     <a class="btn sm" href="data-sources.html">Discover public data sources →</a></div>
+  <div class="grid g4" id="utilStats"><div class="card empty">Loading…</div></div>
+
+  <section class="card" id="utilImport" style="margin-top:18px">
+    <div class="card-h"><h3>Import utility records</h3><span class="badge">Preview → confirm</span></div>
+    <p class="small muted">GeoJSON FeatureCollection (EPSG:4326, Point / LineString, optional top-level <code>connections</code> list) or CSV
+      (points: <code>asset_id, utility_type, asset_type, name, lat, lng</code>; or connections: <code>from_asset_id, to_asset_id, connection_type, direction</code>).
+      Nothing is saved until you confirm. Existing IDs are never overwritten, and imported records start as <strong>unverified</strong>.</p>
+    <form id="uiForm" novalidate>
+      <div class="grid g3" style="gap:10px">
+        <div class="field"><label class="f" for="uiFile">File (max 6 MB)</label><input type="file" id="uiFile" accept=".geojson,.json,.csv,application/json,text/csv"/></div>
+        <div class="field"><label class="f" for="uiFormat">Format</label><select id="uiFormat"><option value="geojson">GeoJSON</option><option value="csv">CSV</option></select></div>
+        <div class="field"><label class="f" for="uiSnapshot">Reviewed source snapshot (optional)</label><input id="uiSnapshot" inputmode="numeric" placeholder="ID from Data sources"/></div>
+      </div>
+      <div class="grid g3" style="gap:10px" id="uiManualSource">
+        <div class="field"><label class="f" for="uiName">Source name</label><input id="uiName" maxlength="160" placeholder="e.g. Ward 12 water GIS export, Mar 2026"/></div>
+        <div class="field"><label class="f" for="uiAuthority">Authority (optional)</label><input id="uiAuthority" maxlength="160"/></div>
+        <div class="field"><label class="f" for="uiProv">Provenance</label><select id="uiProv">
+          <option value="official_unverified">Official source — not field verified</option><option value="planned_design">Planned / design</option>
+          <option value="approximate_unverified" selected>Approximate / unverified</option><option value="verified_as_built">Verified as-built</option>
+          <option value="synthetic_demo">Synthetic demo (fictional)</option></select></div>
+      </div>
+      <div class="field"><label class="f" for="uiLicense">Licence / usage notes (optional)</label><input id="uiLicense" maxlength="500"/></div>
+      <div class="form-error" id="uiError" role="alert" hidden></div>
+      <button class="btn primary" type="submit" id="uiPreviewBtn">Validate and preview</button>
+    </form>
+    <div id="uiResult" aria-live="polite"></div>
+  </section>
+
+  <div class="detail-grid" style="margin-top:18px">
+    <section class="card flush"><div class="card-h pad"><h3>Import history</h3></div>
+      <div class="table-wrap"><table class="table" id="uiJobs"><thead><tr><th>Job</th><th>Source</th><th>Result</th><th>Status</th><th>When</th></tr></thead>
+        <tbody><tr class="static"><td colspan="5" class="empty">Loading…</td></tr></tbody></table></div></section>
+    <section class="card"><div class="card-h"><h3>Utility findings</h3><button class="btn sm" id="ufScan">Re-run rules</button></div>
+      <div id="ufList" class="list"><p class="small muted">Loading…</p></div></section>
+  </div>
+
+  <div class="section-title"><h2>Legacy point-asset registry</h2></div>
   <section class="card">
     <div class="grid g2">
       <form id="importForm" novalidate>
-        <h3>Import assets (GeoJSON)</h3>
-        <p class="small muted">A FeatureCollection of <strong>Point</strong> features with properties
+        <h3>Import point assets (GeoJSON)</h3>
+        <p class="small muted">For the original streetlight / road / drain point registry used for complaint matching. Unlike the utility
+          import above, this saves immediately (no preview). A FeatureCollection of <strong>Point</strong> features with properties
           <code>asset_code</code>, <code>asset_type</code> (streetlight, road_segment, drain, water_main, waste_point, traffic_signal),
           optional <code>name</code>, <code>criticality</code>, <code>inspection_interval_days</code>, <code>last_inspected_at</code>.
           Existing asset codes are never overwritten.</p>
@@ -103,6 +141,16 @@
       <table class="table" id="arTable">
         <thead><tr><th>Reference</th><th>Officer</th><th>Check</th><th>Reports → new since</th><th>Proof photo</th><th>Outcome</th><th>When</th></tr></thead>
         <tbody><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="section-title"><h2>Audit log</h2><span class="badge" id="alCount">0</span></div>
+  <section class="card flush">
+    <div class="table-wrap tall">
+      <table class="table" id="alTable">
+        <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
+        <tbody><tr><td colspan="4" class="empty">Loading…</td></tr></tbody>
       </table>
     </div>
   </section>

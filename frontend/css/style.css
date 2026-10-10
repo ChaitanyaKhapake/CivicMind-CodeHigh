@@ -501,6 +501,21 @@ ul.reasons li { margin: 1px 0; }
 .check-row input { width: auto; margin-top: 3px; }
 .lang-switch { display: inline-flex; align-items: center; gap: 8px; }
 
+/* utility network panel (officer map) */
+.util-panel { position: absolute; top: 12px; right: 12px; bottom: 12px; width: min(400px, calc(100vw - 24px));
+  overflow: auto; z-index: 600; padding: 16px; box-shadow: var(--shadow-lg); }
+.util-sec { border-top: 1px solid var(--line); padding: 8px 0; }
+.util-sec > summary { cursor: pointer; font-weight: 700; font-size: .86rem; padding: 4px 0; }
+.trace-box { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 10px 12px; margin-top: 10px; }
+.cand, .contact { border-left: 4px solid var(--line-2); padding: 6px 10px; margin-top: 6px; background: var(--surface); border-radius: 6px; }
+.cand.ok, .contact.ok { border-left-color: var(--teal); }
+.cand.warn, .contact.warn { border-left-color: var(--amber); }
+.text-amber { color: #8A5A00; }
+.swatch.dashed { background: repeating-linear-gradient(90deg, #5B6B82 0 5px, transparent 5px 8px); height: 4px; }
+#utilTypes label { display: flex; align-items: center; gap: 6px; font-size: .84rem; padding: 2px 0; }
+#utilTypes input { width: auto; }
+.util-card .kv { gap: 10px; }
+
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
   .steps { grid-template-columns: repeat(3,1fr); }

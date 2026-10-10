@@ -39,6 +39,14 @@
         <label class="staff-only"><input type="checkbox" id="layFindings" checked/> Risk findings <strong id="fCount">0</strong></label>
         <label class="staff-only"><input type="checkbox" id="layPriority"/> Only High/Critical incidents</label>
       </fieldset>
+      <fieldset class="layers staff-only">
+        <legend class="f">Utility networks <strong id="utilCount">0</strong></legend>
+        <div id="utilTypes"><span class="tiny muted">Loading…</span></div>
+        <label class="f" for="utilVerif" style="margin-top:8px">Record status</label>
+        <select id="utilVerif" class="sm-select"><option value="">Verified and unverified</option>
+          <option value="verified">Verified only</option><option value="unverified">Unverified only</option></select>
+        <p class="tiny muted" style="margin:6px 0 0">Click a pipe, cable or device to see its recorded connections.</p>
+      </fieldset>
       <div class="row spread" style="margin-top:10px">
         <span class="tiny muted" id="updated">Loading…</span>
         <button class="btn sm" id="refreshBtn">↻ Refresh</button>
@@ -59,15 +67,19 @@
       <div class="lrow"><span class="swatch diamond" style="background:#2F6FDB"></span>asset</div>
       <div class="lrow"><span class="swatch diamond" style="background:#7B4FD1"></span>critical asset</div>
       <div class="lrow"><span class="swatch flag">🚩</span>risk finding</div>
+      <div class="legend-title">Utility networks</div>
+      <div id="utilLegend"></div>
     </div>
   </section>
 
+  <aside class="util-panel card" id="utilPanel" hidden aria-label="Utility asset details" aria-live="polite"></aside>
   <div id="map" role="application" aria-label="City map"></div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="js/api.js"></script>
 <script src="js/common.js"></script>
+<script src="js/utility-network.js"></script>
 <script src="js/map.js"></script>
 </body>
 </html>

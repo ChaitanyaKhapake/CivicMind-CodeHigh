@@ -6,7 +6,10 @@ let CFG = { categories: [], city_center: { lat: 18.5204, lng: 73.8567 }, require
 let assist = null, assistStale = false;   // last assistant suggestion (never submitted automatically)
 const LANG_KEY = 'cm_lang';
 
-const STEPS = ['Submitted', 'Grouped / reviewed', 'Work in progress', 'Resolved'];
+const STEPS = () => [I18N.t('step1'), I18N.t('step2'), I18N.t('step3'), I18N.t('step4')];
+// Status names and "what happens next" in the citizen's language (fixed texts; English comes from the server).
+const stText = (s) => (I18N.lang !== 'en' && I18N.t('st_' + s) !== 'st_' + s) ? I18N.t('st_' + s) : CM.statusText(s);
+const nextText = (s, fallback) => (I18N.lang !== 'en' && I18N.t('next_' + s) !== 'next_' + s) ? I18N.t('next_' + s) : fallback;
 const stepIndex = (s) => ({ submitted: 0, clustered: 1, in_progress: 2, resolved: 3 }[s] ?? 0);
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -40,7 +43,7 @@ function initLanguage() {
   sel.addEventListener('change', async () => {
     applyLanguage(sel.value);
     try { localStorage.setItem(LANG_KEY, sel.value); } catch { /* private mode */ }
-    clearAssist();
+    clearAssist(); loadMine();
     try {
       await CM.api('/api/auth/preferences', { method: 'POST', body: { preferred_language: sel.value } });
       CM.setSession(CM.getToken(), { ...CM.getUser(), preferred_language: sel.value });
@@ -213,7 +216,7 @@ async function loadMine() {
 
 function complaintCard(c) {
   const si = stepIndex(c.status);
-  const steps = STEPS.map((lbl, i) => {
+  const steps = STEPS().map((lbl, i) => {
     const cls = c.status === 'rejected' ? '' : (i < si || (i === si && c.status === 'resolved') ? 'done' : (i === si ? 'current' : ''));
     return `<div class="step ${cls}"><div class="bubble">${cls === 'done' ? '✓' : i + 1}</div><div class="lbl">${lbl}</div></div>`;
   }).join('');
@@ -226,7 +229,7 @@ function complaintCard(c) {
           <strong class="small">${CM.esc(c.public_id)}</strong>
           <span class="muted small">${CM.esc(c.ward || '')}</span>
         </div>
-        <span class="badge ${CM.sClass(c.status)}">${CM.esc(CM.statusText(c.status))}</span>
+        <span class="badge ${CM.sClass(c.status)}">${CM.esc(stText(c.status))}</span>
       </div>
       <div class="complaint-body">
         ${c.has_photo ? `<img class="thumb" alt="Your photo" data-auth-src="/api/complaints/${c.id}/photo"/>` : ''}
@@ -236,7 +239,7 @@ function complaintCard(c) {
         </div>
       </div>
       <div class="track" aria-label="Progress">${steps}</div>
-      <p class="small" style="margin:6px 0"><strong>Next:</strong> ${CM.esc(c.next_step)}</p>
+      <p class="small" style="margin:6px 0"><strong>${CM.esc(I18N.t('next'))}:</strong> ${CM.esc(nextText(c.status, c.next_step))}</p>
       ${c.status === 'resolved' && c.resolved_by_name ? `<p class="small muted" style="margin:0 0 6px">Resolved by officer ${CM.esc(c.resolved_by_name)} on ${CM.esc(CM.fmtDay(c.resolved_at))}.</p>` : ''}
       <div class="row spread wrap-row tiny muted">
         <span>Tracking code <code>${CM.esc(c.tracking_code || '—')}</code> · submitted ${CM.esc(CM.fmtDate(c.created_at))} · updated ${CM.esc(CM.timeAgo(c.updated_at))}</span>
@@ -255,10 +258,10 @@ async function trackComplaint(e) {
     const d = await CM.api('/api/track/' + encodeURIComponent(code));
     el.innerHTML = `<div class="card tight">
         <div class="row spread"><strong>${CM.esc(d.public_id)}</strong>
-        <span class="badge ${CM.sClass(d.status)}">${CM.esc(CM.statusText(d.status))}</span></div>
+        <span class="badge ${CM.sClass(d.status)}">${CM.esc(stText(d.status))}</span></div>
         <p class="small muted" style="margin:8px 0 4px">${CM.esc(d.category)} · ${CM.esc(d.ward || '')} · submitted ${CM.esc(d.submitted_on)}</p>
         ${d.incident ? `<p class="small" style="margin:0">Part of incident ${CM.esc(d.incident.public_id)} (${CM.esc(d.incident.report_count)} reports) — ${CM.esc(CM.statusText(d.incident.status))}</p>` : ''}
-        <p class="small" style="margin:6px 0 0">${CM.esc(d.next_step)}</p></div>`;
+        <p class="small" style="margin:6px 0 0">${CM.esc(nextText(d.status, d.next_step))}</p></div>`;
   } catch (ex) { el.innerHTML = `<p class="small text-red">${CM.esc(ex.message)}</p>`; }
 }
 

@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('panelToggle').setAttribute('aria-expanded', String(!body.hidden));
   });
   await loadAll(true);
+  if (isStaff && typeof UtilityLayer !== 'undefined') UtilityLayer.mount(map);
   setInterval(() => { if (!document.hidden) loadAll(); }, 60000);
 });
 

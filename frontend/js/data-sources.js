@@ -241,7 +241,8 @@ async function onReviewClick(e) {
       const m = await CM.api(`/api/admin/data-sources/snapshots/${id}/source-metadata`);
       $('metaBox').innerHTML = `<div class="card tight soft" style="margin-top:12px">
         <strong>Import source metadata</strong> <span class="badge">${CM.esc(m.provenance_class)}</span>
-        <p class="tiny muted">${CM.esc(m.next_step)}</p><pre class="content-pre" id="metaPre"></pre></div>`;
+        <p class="tiny muted">${CM.esc(m.next_step)}</p><pre class="content-pre" id="metaPre"></pre>
+        ${m.utility_import_available ? `<a class="btn sm primary" style="margin-top:10px" href="admin.html?snapshot=${Number(m.snapshot_id)}#utilImport">Use as the source of a utility import →</a>` : ''}</div>`;
       $('metaPre').textContent = JSON.stringify(m, null, 2);
     } catch (ex) { CM.toast(detailError(ex), 'err'); }
     return;

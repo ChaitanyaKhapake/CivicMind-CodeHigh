@@ -8,10 +8,142 @@ document.addEventListener('DOMContentLoaded', () => {
   $('addUser').addEventListener('submit', addUser);
   $('importForm').addEventListener('submit', importAssets);
   $('resetBtn').addEventListener('click', resetData);
+  $('uiForm').addEventListener('submit', previewImport);
+  $('uiResult').addEventListener('click', (e) => { const b = e.target.closest('[data-confirm]'); if (b) confirmImport(b); });
+  $('ufScan').addEventListener('click', () => CM.busy($('ufScan'), 'Running…', async () => {
+    try { const r = await CM.api('/api/utility/findings/scan', { method: 'POST' }); CM.toast(`${r.active} active finding(s)`, 'ok'); loadFindings(); }
+    catch (e) { CM.fail(e); } }));
+  $('ufList').addEventListener('click', reviewFinding);
+  const snap = new URLSearchParams(location.search).get('snapshot');
+  if (snap && /^\d+$/.test(snap)) { $('uiSnapshot').value = snap; setTimeout(() => $('utilImport').scrollIntoView(), 300); }
   loadAll();
 });
 
-function loadAll() { loadStats(); loadUsers(); loadConfig(); loadComplaints(); loadResolutions(); }
+function loadAll() { loadStats(); loadUsers(); loadConfig(); loadComplaints(); loadResolutions(); loadUtility(); loadJobs(); loadFindings(); loadAudit(); }
+
+/* ---------- utility network data ---------- */
+async function loadUtility() {
+  try {
+    const m = await CM.api('/api/utility/meta');
+    const total = m.utility_types.reduce((s, t) => s + t.count, 0);
+    const v = Object.fromEntries(m.by_verification.map(r => [r.verification_status, r.c]));
+    $('utilStats').innerHTML = `
+      <div class="card metric"><div class="k">Utility assets</div><div class="v">${CM.num(total)}</div>
+        <div class="sub tiny muted">${m.utility_types.filter(t => t.count).map(t => `${CM.esc(t.label)} ${CM.num(t.count)}`).join(' · ') || 'none yet'}</div></div>
+      <div class="card metric"><div class="k">Recorded connections</div><div class="v">${CM.num(m.connections)}</div><div class="sub tiny muted">explicit links only</div></div>
+      <div class="card metric"><div class="k">Verification</div><div class="v">${CM.num(v.verified || 0)}</div>
+        <div class="sub tiny muted">verified · ${CM.num(v.unverified || 0)} unverified · ${CM.num(v.disputed || 0)} disputed</div></div>
+      <div class="card metric"><div class="k">Synthetic records</div><div class="v">${CM.num(m.synthetic_assets)}</div>
+        <div class="sub tiny muted">${m.by_provenance.map(p => `${CM.esc(CM.titleCase(p.provenance_class))} ${CM.num(p.c)}`).join(' · ')}</div></div>`;
+  } catch (e) { $('utilStats').innerHTML = `<div class="card empty">${CM.esc(e.message)}</div>`; }
+}
+
+async function previewImport(e) {
+  e.preventDefault();
+  const err = $('uiError'); err.hidden = true;
+  const f = $('uiFile').files[0];
+  if (!f) { err.textContent = 'Choose a GeoJSON or CSV file.'; err.hidden = false; return; }
+  if (f.size > 6 * 1024 * 1024) { err.textContent = 'File is larger than 6 MB.'; err.hidden = false; return; }
+  const snapshot = $('uiSnapshot').value.trim();
+  const body = { format: $('uiFormat').value, content: await f.text() };
+  if (snapshot) {
+    if (!/^\d+$/.test(snapshot)) { err.textContent = 'Snapshot ID must be a number.'; err.hidden = false; return; }
+    body.snapshot_id = Number(snapshot); body.source = { file_name: f.name };
+  } else {
+    if ($('uiName').value.trim().length < 2) { err.textContent = 'Describe where the data came from (source name).'; err.hidden = false; return; }
+    body.source = { name: $('uiName').value.trim(), authority: $('uiAuthority').value.trim() || null, file_name: f.name,
+      license_notes: $('uiLicense').value.trim() || null, provenance_class: $('uiProv').value,
+      is_synthetic: $('uiProv').value === 'synthetic_demo' };
+  }
+  await CM.busy($('uiPreviewBtn'), 'Validating…', async () => {
+    try { renderPreview(await CM.api('/api/utility/import/preview', { method: 'POST', body })); }
+    catch (ex) { err.textContent = ex.message; err.hidden = false; }
+  });
+}
+
+function issueList(title, rows) {
+  if (!rows.length) return '';
+  return `<p class="small" style="margin:8px 0 2px"><strong>${CM.esc(title)} (${rows.length})</strong></p>
+    <ul class="tiny" style="margin:0;padding-left:18px">${rows.slice(0, 30).map(r => `<li>${CM.esc(r.id || '#' + r.index)} — ${CM.esc(r.reason)}</li>`).join('')}</ul>`;
+}
+
+function renderPreview(p) {
+  const a = p.summary.assets, c = p.summary.connections;
+  $('uiResult').innerHTML = `<div class="card tight soft" style="margin-top:14px">
+    <div class="row spread wrap-row"><strong>Preview ${CM.esc(p.job_code)} — nothing saved yet</strong>
+      <span class="badge">${CM.esc(CM.titleCase(p.source.provenance_class))}</span></div>
+    <p class="small">Assets: <strong>${CM.esc(a.accepted)}</strong> accepted of ${CM.esc(a.received)} ·
+       Connections: <strong>${CM.esc(c.accepted)}</strong> accepted of ${CM.esc(c.received)}</p>
+    ${issueList('Duplicates (never overwritten)', [...a.duplicates, ...c.duplicates])}
+    ${issueList('Rejected assets', a.rejected)}
+    ${issueList('Missing relationships', c.missing_relationships)}
+    ${issueList('Rejected connections', c.rejected)}
+    ${p.summary.warnings.length ? `<p class="small" style="margin:8px 0 2px"><strong>Warnings</strong></p><ul class="tiny" style="margin:0;padding-left:18px">${p.summary.warnings.map(w => `<li>${CM.esc(w)}</li>`).join('')}</ul>` : ''}
+    ${p.sample.length ? `<p class="small" style="margin:8px 0 2px"><strong>Sample</strong></p><ul class="tiny" style="margin:0;padding-left:18px">${p.sample.map(s => `<li>${CM.esc(s.asset_id)} · ${CM.esc(s.utility_type)} ${CM.esc(s.asset_type)} · ${CM.esc(s.name)}</li>`).join('')}</ul>` : ''}
+    <p class="tiny muted">${CM.esc(p.summary.verification_note)}</p>
+    ${p.can_confirm ? `<button class="btn primary" data-confirm="${CM.esc(p.job_code)}">Confirm import of accepted records</button>` : '<p class="small text-red">Nothing valid to import.</p>'}
+  </div>`;
+}
+
+async function confirmImport(btn) {
+  await CM.busy(btn, 'Importing…', async () => {
+    try {
+      const r = await CM.api('/api/utility/import/confirm', { method: 'POST', body: { job_code: btn.dataset.confirm } });
+      const c = r.summary.committed;
+      $('uiResult').innerHTML = `<div class="card tight" style="margin-top:14px"><strong>Imported ${CM.esc(r.job_code)}</strong>
+        <p class="small">${CM.esc(c.assets)} asset(s) and ${CM.esc(c.connections)} connection(s) saved as unverified.
+        ${c.skipped_assets.length ? CM.esc(c.skipped_assets.length) + ' skipped (appeared since the preview).' : ''}</p></div>`;
+      CM.toast('Import committed', 'ok'); loadUtility(); loadJobs(); loadFindings(); loadAudit();
+    } catch (ex) { CM.fail(ex); }
+  });
+}
+
+async function loadJobs() {
+  try {
+    const rows = await CM.api('/api/utility/import/jobs');
+    document.querySelector('#uiJobs tbody').innerHTML = rows.map(j => {
+      const s = j.summary, done = s.committed;
+      return `<tr class="static"><td class="small"><strong>${CM.esc(j.job_code)}</strong><div class="tiny muted">${CM.esc(j.input_format)} · ${CM.esc(j.created_by_name || '')}</div></td>
+        <td class="small">${CM.esc(j.source_meta.name || '—')}<div class="tiny muted">${CM.esc(CM.titleCase(j.source_meta.provenance_class || ''))}</div></td>
+        <td class="small">${done ? `${CM.esc(done.assets)} assets · ${CM.esc(done.connections)} links` : `${CM.esc(s.assets.accepted)} / ${CM.esc(s.assets.received)} valid`}</td>
+        <td><span class="badge ${j.status === 'committed' ? 'resolved' : 'pending'}">${CM.esc(CM.titleCase(j.status))}</span></td>
+        <td class="small muted">${CM.esc(CM.timeAgo(j.committed_at || j.created_at))}</td></tr>`;
+    }).join('') || '<tr class="static"><td colspan="5" class="empty">No imports yet.</td></tr>';
+  } catch (e) { CM.fail(e); }
+}
+
+async function loadFindings() {
+  try {
+    const rows = await CM.api('/api/utility/findings');
+    $('ufList').innerHTML = rows.map(f => `<div class="finding sev-${CM.esc(f.severity)}">
+        <div class="row spread wrap-row"><strong class="small">${CM.esc(f.rule_title)}</strong>
+          <span class="badge ${CM.sevClass(f.severity)}">${CM.esc(CM.titleCase(f.severity))}</span></div>
+        <div class="small">${CM.esc(f.explanation)}</div>
+        <div class="tiny muted">${CM.esc(f.rule_id)} · assets ${f.asset_ids.map(a => CM.esc(a)).join(', ')} · ${CM.esc(CM.titleCase(f.status))}${f.is_synthetic ? ' · synthetic data' : ''}</div>
+        ${f.status === 'open' ? `<button class="link-btn tiny" data-fid="${Number(f.id)}" data-st="acknowledged">Acknowledge</button> ·
+          <button class="link-btn tiny" data-fid="${Number(f.id)}" data-st="dismissed">Dismiss</button>` : ''}</div>`).join('')
+      || '<p class="small muted">No active findings.</p>';
+  } catch (e) { CM.fail(e); }
+}
+
+async function reviewFinding(e) {
+  const b = e.target.closest('[data-fid]');
+  if (!b) return;
+  try { await CM.api(`/api/utility/findings/${b.dataset.fid}/review`, { method: 'POST', body: { status: b.dataset.st } }); loadFindings(); }
+  catch (ex) { CM.fail(ex); }
+}
+
+async function loadAudit() {
+  try {
+    const rows = await CM.api('/api/admin/activity?limit=100');
+    $('alCount').textContent = rows.length;
+    document.querySelector('#alTable tbody').innerHTML = rows.map(a => `<tr class="static">
+      <td class="small muted">${CM.esc(CM.fmtDate(a.created_at))}</td><td class="small">${CM.esc(a.actor || 'CivicMind')}</td>
+      <td class="small"><code>${CM.esc(a.action)}</code></td>
+      <td class="small">${CM.esc(a.detail || '')}${a.incident_public_id ? ` · <a class="link" href="incident.html?id=${encodeURIComponent(a.incident_id)}">${CM.esc(a.incident_public_id)}</a>` : ''}</td></tr>`).join('')
+      || '<tr class="static"><td colspan="4" class="empty">No activity yet.</td></tr>';
+  } catch (e) { CM.fail(e); }
+}
 
 async function loadStats() {
   try {

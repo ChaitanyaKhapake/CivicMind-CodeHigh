@@ -1,37 +1,41 @@
 # CivicMind
 
-**Civic complaint intelligence for municipal teams.** CivicMind turns scattered citizen complaints into
-incidents, links them to the infrastructure behind them (a specific streetlight, road segment or drain),
-flags infrastructure risks with explainable rules, ranks the work with a transparent score, and tracks each
-response through an accountable, proof-backed workflow.
+**Civic operations intelligence.** Citizens report problems in English, हिन्दी or मराठी. CivicMind groups related
+reports into incidents, connects them to the **recorded underground utility network** (pipes, cables, valves,
+switches), traces what the affected asset connects to, shows the operator contact and candidate isolation points,
+and takes each case through an accountable, proof-backed response workflow.
 
-Built for **Build with भारत 4.0** · Team **CodeHigh** (MIT ADT Pune) · Sustainability & Social Impact.
-This is a hackathon prototype. It is not connected to any municipal system.
+Built for **Build with भारत 4.0** · Team **CodeHigh** (MIT ADT Pune). This is a hackathon prototype. It is **not
+connected to any municipal system**; demo data is fictional and labelled as such everywhere.
 
 ---
 
-## Quick start
+## Three portals, one application
 
-Requires Python 3.11+. Verified locally on Python 3.14; the Docker image uses 3.12 (image build not tested here).
+| Portal | Entry | For | Highlights |
+|---|---|---|---|
+| Citizen | `/citizen` → `citizen.html` | residents | report in EN/HI/MR with a review-first assistant, map pin, photo, private tracking code, status timeline in your language, notifications |
+| Officer | `/officer` → `dashboard.html`, `map.html`, `incident.html` | municipal staff | priority queue, live map with **utility layers**, asset panel with **network tracing**, isolation candidates, **Utility Copilot**, incident briefing, operator coordination, plans, evidence, verification |
+| Admin | `/admin` → `admin.html`, `data-sources.html` | administrators | users and roles, utility data overview, **GeoJSON/CSV import with preview → confirm**, TinyFish public-source discovery, findings, audit log |
 
-### Demo (fictional data, recommended for presentations)
+Sign-in sends each user to the portal of their **server-side** role. Pages re-check the role with the server, and
+every API call is authorised on the server regardless of which page is open.
+
+## Technology
+
+Python 3.11+ · FastAPI · SQLite (WAL) · HTML/CSS/vanilla JavaScript · Leaflet + OpenStreetMap tiles · Chart.js ·
+optional Sarvam AI · TinyFish Search/Fetch/Agent (server-side). One modular monolith, one database.
+
+## Quick start (Windows)
 
 ```powershell
-run_demo.bat            # Windows
-./run_demo.sh           # macOS / Linux
+run_demo.bat            # installs dependencies, builds/updates the isolated DEMO database, starts the app
 ```
 
-This installs dependencies, builds an **isolated** demo database at `data/demo/civicmind_demo.db`
-(your regular database is never touched), and starts the app at **http://localhost:8000**.
+Open **http://localhost:8000**. Demo logins are generated locally into `data/demo/demo_credentials.txt`
+(never served by the API). `run_demo.bat --reset` rebuilds the demo data. macOS/Linux: `./run_demo.sh`.
 
-- Demo logins (generated locally, never served by the API): `data/demo/demo_credentials.txt`
-- A synthetic proof photo for the officer step: `data/demo/sample_proof_photo.jpg`
-- Rebuild the demo from scratch: `run_demo.bat --reset` / `./run_demo.sh --reset`
-- Set `CIVICMIND_DEMO_PASSWORD=<8+ chars>` **before the first seed** if you want one shared demo password.
-
-Everything in the demo is fictional and shown with a **Synthetic** tag. See [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
-
-### Regular use
+Regular (non-demo) use:
 
 ```powershell
 cd backend
@@ -40,14 +44,86 @@ python manage.py create-user --email you@example.org --name "Your Name" --role a
 python -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-`run.bat` / `run.sh` do the same. The database is `backend/civicmind.db`; private photos go to
-`private/evidence/`. Both are created automatically and are gitignored. Citizens register themselves;
-admins create officer accounts in the admin console or with `manage.py`.
+Always open the app through the server, not by double-clicking HTML files.
 
-> On Windows use `python`, not `python3`. Always open the app through the server (http://localhost:8000),
-> not by double-clicking the HTML files.
+## Configuration
 
-### Tests
+- `.env` (gitignored; template in `.env.example`, placeholders only):
+  - `SARVAM_API_KEY` — optional AI. Without it, rule-based engines handle everything.
+  - `TINYFISH_API_KEY` — public data-source discovery. Without it the Data sources page says "not configured".
+  - `TINYFISH_MOCK_MODE=true` — fictional, clearly labelled TinyFish responses for demos/tests only.
+  - `TINYFISH_ENABLE_AGENT` — off by default (metered browser automation).
+  - `CIVICMIND_SECRET` — token signing secret (auto-generated locally if empty).
+- `data/civicmind_config.json` — city, wards, categories, departments, grouping and risk-rule thresholds.
+  This configuration is read-only in the admin UI (edit the file and restart).
+
+## Database and migrations
+
+`init_db()` runs on every start and is **additive only**: it creates missing tables, adds missing columns and
+indexes, and never drops or rewrites data. The utility network tables are all prefixed `utility_` and created by
+`services/utility_network/schema.py::init_schema` inside the same transaction. Demo data is **never** written at
+start-up — only by `seed_demo.py`, which refuses to touch a database that is not marked as a demo database.
+
+## Utility network model
+
+- **Assets** (`utility_assets`): water, sewer, storm, electricity, gas, telecom, road; Point assets (sources,
+  junctions, valves, switches, transformers…) double as network nodes, LineString assets are mains/cables/sewers.
+  Technical attributes are stored only when a source provides them — unknown values stay unknown.
+- **Connections** (`utility_connections`) are explicit records with a direction (`downstream` = flow from→to,
+  `bidirectional`, `unknown`). **Geometry is never used to create a connection** — lines touching on the map are
+  not connected unless a record says so.
+- **Provenance** on every record: `verified_as_built`, `official_unverified`, `planned_design`,
+  `approximate_unverified`, `synthetic_demo`; plus `verification_status` (verified / unverified / disputed).
+- **Tracing** (`services/utility_network/graph.py`): deterministic BFS over recorded connections; upstream,
+  downstream or both; hop/node limits; loop detection; unknown-direction links and missing links reported as gaps.
+- **Isolation candidates**: the nearest recorded control device on each traced branch, with the path and whether
+  every record on it is verified. They are **candidates** — the authorised operator confirms the actual control
+  point. CivicMind never operates or instructs anyone to operate valves, switches or gas controls.
+- **Incident context**: compatible assets (category → utility type) whose recorded geometry lies within 120 m of a
+  report, with distance and reason. Officers confirm or reject; proximity is never presented as cause.
+- **Findings** (`utility_findings`, rules U1–U6): repeated reports on an asset, recurrence after recorded work,
+  critical asset in a severe incident, isolation candidates relying on unverified records, no recorded source
+  upstream, conflicting open plans. Each finding names its rule and triggering records.
+- **Utility Copilot / incident briefing**: answers are assembled from records with cited IDs. If Sarvam is
+  configured it may only rephrase those facts; its text is rejected if it mentions any ID not in the evidence.
+  Fictional contacts are never treated as usable operator contacts.
+
+## GIS import formats
+
+Admin → *Import utility records* (preview first, then confirm):
+
+- **GeoJSON** FeatureCollection in EPSG:4326 (`[longitude, latitude]`), Point and LineString features with
+  `asset_id, utility_type, asset_type, name` (+ optional `operational_status, operator_org, criticality,
+  diameter_mm, material, install_year, depth_m, voltage_kv, …`). Optional top-level `connections` list of
+  `{from_asset_id, to_asset_id, connection_type, direction}`. Other CRSs are rejected — re-project first.
+- **CSV** of point assets (`asset_id, utility_type, asset_type, name, lat, lng, …`) or of connections
+  (`from_asset_id, to_asset_id, connection_type, direction`).
+
+The preview reports accepted, duplicate (never overwritten), rejected, possibly swapped-coordinate and
+missing-relationship records. Confirmed records are stored as **unverified**; an admin records verification
+separately. Shapefile/KML/PDF extraction are not implemented.
+
+## Public data-source discovery (TinyFish)
+
+Admin → **Data sources**: TinyFish Search finds candidate public sources; TinyFish Fetch extracts up to 10 selected
+pages; the admin reads the extracted text and approves or rejects it; an approved source can be used as the
+provenance of a utility import ("Use as the source of a utility import"). Web content is untrusted, is never
+imported as geometry automatically, and is at best `official_unverified`.
+
+1. Put your key in `.env` (never in code or Git): `TINYFISH_API_KEY=...`
+2. Restart — the server log shows `TinyFish: configured (live)`.
+3. Live check: Data sources → search *Pune Municipal Corporation / water supply network* → select → *Fetch
+   selected* → open → approve → *Show import source metadata*. Results must be tagged **Live**, not Mock.
+
+## Multilingual reporting
+
+Citizens pick English, हिन्दी or मराठी (saved to their profile). The report form, progress steps, status names and
+"what happens next" follow the language. *Check my report* suggests a category, severity and follow-up questions
+(rule-based with Hindi/Marathi keywords, or Sarvam AI when configured) and — only with an AI provider — an English
+translation the citizen can edit. Suggestions are applied only by the citizen; the translation is stored separately
+and only if they tick that they reviewed it. Voice input is **not implemented**.
+
+## Tests
 
 ```powershell
 cd backend
@@ -55,151 +131,70 @@ python -m pip install -r requirements-dev.txt
 python -m pytest
 ```
 
-The suite uses a fresh temporary database per test, never calls the live AI provider or TinyFish (both are
-mocked), and includes two browser-free frontend checks (API-path coverage and a Node-based XSS rendering
-test; skipped if Node is not installed). There is no automated real-browser test.
+Every test uses a fresh temporary database; Sarvam and TinyFish are mocked; two Node-based checks verify that every
+API path used by the JavaScript exists and that renderers escape hostile text (skipped if Node is missing).
+There is no automated real-browser test; the browser walkthrough below was done manually.
 
-### Portals
+## Demo walkthrough (fictional data)
 
-`/citizen`, `/officer` and `/admin` open the Civilian, Officer and Admin portals (`citizen.html`,
-`dashboard.html`, `admin.html`). Sign-in sends each user to the portal of their **server-side** role; pages
-re-check the role with the server, and every API call is authorised on the server regardless of the page.
+1. Landing page → sign in as the demo **citizen** → switch to मराठी → describe a leak → *Check my report* → apply
+   the category → pin the map → submit; note the tracking code.
+2. Sign in as the demo **officer** → Operations shows *Utility network findings* (repeated reports, leak 25 days
+   after a recorded repair) → open the water-leak incident (*Probable Water Leakage — Kothrud*).
+3. *Utility network context*: `WM-DEMO-03` is the nearest candidate (≈3 m) → *Confirm relevant* → *Generate incident
+   briefing* (facts with record IDs, hypotheses, data gaps, checklist).
+4. *Open on utility map* → asset panel → *Find isolation candidates*: `V-DEMO-02` upstream and `V-DEMO-04`
+   downstream, both on verified paths; the loop link `UC-DEMO-13` has unknown direction and is flagged.
+   Ask the Copilot "What is the upstream source?". Click `WM-DEMO-102` to show a branch with **no recorded source**.
+5. Back on the incident → *Utility operator coordination*: record *operator contacted* → *isolation confirmed by
+   operator* (reference required) → approve the plan → *crew dispatched* → start → complete with
+   `data/demo/sample_proof_photo.jpg` → the incident is verified and the timeline updated.
+6. Sign in as the demo **admin** → utility data overview, findings, audit log → *Import utility records* preview
+   (duplicates and missing relationships are reported) → Data sources (TinyFish; Mock unless a key is set).
 
-### Public data-source discovery (TinyFish)
+Fallbacks: without Sarvam everything is rule/record-based; without TinyFish the page states it is not configured
+(or use mock mode); if map tiles fail, markers and panels still work; uploads that fail checks are rejected with
+reasons.
 
-Admins open **Data sources** to find official public sources (GIS pages, open-data catalogues, contact
-directories) with TinyFish Search, fetch up to 10 selected pages with TinyFish Fetch, read the extracted text
-and approve or reject each one. Approved sources provide provenance metadata for the utility import preview.
-Nothing found or fetched becomes an infrastructure record without that preview and an admin confirmation.
+## Security notes
 
-1. Put your key in `.env` (never in code or Git): `TINYFISH_API_KEY=...`
-2. Restart; the server log shows `TinyFish: configured (live)`.
-3. Manual live smoke test: Admin → Data sources → search for e.g. *Pune Municipal Corporation / water supply
-   network*, select one result, *Fetch selected*, open it, approve it, *Show import source metadata*.
-   Check that results are tagged **Live**, not Mock.
+Server-side authorisation on every route (see [docs/SECURITY.md](docs/SECURITY.md)); citizens never receive
+utility topology, contacts or other residents' data; private evidence store with content validation and EXIF
+removal; HMAC tokens with revocation; login throttling; CSP and security headers; structured errors without stack
+traces; API keys only on the server. Rotate any credential that was ever shared in an archive or chat.
 
-`TINYFISH_MOCK_MODE=true` returns fictional, clearly labelled results for demos without a key. The optional
-Agent (`TINYFISH_ENABLE_AGENT`) is off by default; it is read-only, limited to domains of selected candidates,
-capped per day and metered by TinyFish — check pricing first.
+## Known limitations
 
-### Reporting in English, Hindi or Marathi
-
-Citizens choose a language (saved to their profile); the report form's labels follow it. *Check my report*
-suggests a category, severity and follow-up questions (rule-based, or Sarvam AI when configured) and — only
-with an AI provider — an English translation the citizen can edit. The citizen applies suggestions explicitly;
-the translation is included only if they tick that they reviewed it. The original words are always what is
-stored as the description; the translation is kept separately for officers.
-
-### Utility operator coordination
-
-On an incident, officers record coordination with the utility operator: operator contacted, guidance received,
-isolation confirmed by the operator (or not required), crew dispatched. Isolation steps need a prior contact
-record; a dispatch needs the operator's isolation decision. CivicMind never operates valves, breakers or gas
-controls — it records what the authorised operator confirmed.
-
-See [docs/CIVICMIND_INTEGRATION_CONTRACT.md](docs/CIVICMIND_INTEGRATION_CONTRACT.md) for the shared contract
-with the Utility Network subsystem and [docs/INTEGRATION_REPORT.md](docs/INTEGRATION_REPORT.md) for status.
-
----
-
-## How it works
-
-`Report → Group → Link to asset → Prioritise → Plan → Act → Verify`
-
-1. **Report** — a citizen picks a category, describes the problem, pins the location and may add a photo.
-   They receive a reference (`CMP-00012`) and a **private tracking code**.
-2. **Classify** — Sarvam AI (if configured) or the rule-based engine suggests category and severity. The UI
-   always shows which engine ran. AI output is schema-validated and cannot change any state.
-3. **Group** — reports of the same or configured-related category within 1.5 km and 48 h are grouped into an
-   incident (minimum 3). A new matching report joins the existing open incident instead of creating a duplicate.
-4. **Link** — each report is matched to the nearest *compatible* asset within 150 m (e.g. a streetlight report
-   only matches streetlights). No compatible asset nearby → no match.
-5. **Prioritise** — a bounded 0–100 score: severity (35) + linked reports (20) + time unresolved (15) +
-   category safety weight (15) + critical-asset link (15). Every factor is shown.
-6. **Risk findings** — rules run over real records: repeated complaints on one asset (A), a report soon after
-   a repair — *possible* recurrence (B), critical-asset incident (C), geographic concentration (D), overdue
-   inspection (E), conflicting plans on one asset (F). Each finding shows its evidence and can be acknowledged
-   or dismissed.
-7. **Plan & act** — the officer approves, edits or rejects the drafted plan (only one open plan per incident),
-   marks work started, then completes it with a **proof photo**. Completing records a maintenance event on the
-   linked asset.
-8. **Verify** — closing requires a completed plan and a proof photo that passed automated checks. A
-   recurrence check counts new related reports since completion; officers can re-run it later, which reopens
-   the incident if the problem came back. This is *workflow* verification, not a field inspection.
-
-Officers can also resolve a single complaint directly (with its own proof photo).
-
----
-
-## Security & privacy model
-
-Enforced on the server for every request — see [docs/SECURITY.md](docs/SECURITY.md) for the route matrix.
-
-- **Roles**: citizen, officer, admin. The role is re-read from the database on every request; a role sent by
-  a client (registration body, tampered token) is ignored. Registration always creates a citizen.
-- **Citizens** see only their own complaints, notifications and photos. For incidents they are part of, they
-  get a reduced view (no other citizens' names, descriptions or exact points). Map data follows the same rules.
-- **Public tracking** needs the private 10-character code and returns status only — no description, location,
-  names or photos. Sequential `CMP-` numbers are not accepted.
-- **Evidence**: photos are validated by content (JPEG/PNG/WebP only), size- and pixel-limited, re-encoded
-  (EXIF/GPS removed), stored under server-generated names in a private folder, and served only through
-  authorised endpoints. Rejected uploads leave no file behind.
-- **Auth**: PBKDF2-SHA256 (310k iterations, older hashes upgraded on login), HMAC-signed tokens with expiry
-  (12 h default), "sign out everywhere" and password change revoke old tokens, login throttling.
-- **No published passwords**: nothing creates accounts with known passwords. Startup warns if an account still
-  uses one of the old default passwords from earlier versions.
-- **Hardening**: request-size limit, security headers and CSP, generic error messages (details only in server
-  logs), tokens redacted from access logs, transactional state changes with conflict detection (HTTP 409).
-
----
-
-## Configuration
-
-- `data/civicmind_config.json` — city, wards, categories, departments, related-category groups, asset types,
-  category → asset-type compatibility, match radius, risk-rule thresholds, priority thresholds.
-- `.env` (gitignored) or environment variables — see `.env.example` (Sarvam key, secret, token lifetime, paths).
+- Ward assignment uses the nearest ward centre, not official boundaries.
+- Utility data in the demo is synthetic; no official GIS dataset is connected.
+- The Copilot waits for Sarvam (up to its 25 s timeout) before falling back to the record-based answer.
+- Voice input, Shapefile/KML import and PDF extraction are not implemented.
+- In-process throttles and caches assume a single server instance; SQLite only.
+- Hindi/Marathi interface strings should be reviewed by native speakers.
+- `CivicMind_Deployment_Guide.docx` describes an older version.
 
 ## Project structure
 
 ```
 civicmind/
 ├─ backend/
-│  ├─ main.py               app, middleware (size limit, headers), error handling
-│  ├─ config.py · database.py · auth.py
-│  ├─ manage.py             create-user / set-password / list-users
-│  ├─ seed_demo.py          builds the isolated demo database
-│  ├─ routes/               auth, complaints, incidents, actions, infrastructure, dashboard, admin, realtime, config,
-│  │                        data_sources (TinyFish), assistant (multilingual), coordination (operator log)
-│  ├─ services/             complaints (intake), clustering, priority, assets, risk, actions (state machine),
-│  │                        evidence, ai, assistant, coordination, geo, bootstrap, tinyfish/ (client, URL safety, mock)
-│  └─ tests/                pytest suite
-├─ frontend/                index, citizen, dashboard, incident, map, assets (infrastructure), admin, data-sources
-├─ data/civicmind_config.json
-├─ docs/                    SECURITY.md, DEMO_SCRIPT.md
-└─ run.bat · run.sh · run_demo.bat · run_demo.sh · Dockerfile · render.yaml · deploy/
+│  ├─ main.py · config.py · database.py · auth.py · manage.py · seed_demo.py
+│  ├─ routes/      auth, complaints, incidents, actions, infrastructure, dashboard, admin, realtime, config,
+│  │               data_sources (TinyFish), assistant, coordination, utility_network
+│  ├─ services/    complaints, clustering, priority, assets, risk, actions, evidence, ai, assistant, coordination,
+│  │               geo, bootstrap, tinyfish/ (client, URL safety, mock), utility_network/ (schema, model, geometry,
+│  │               registry, graph, matching, findings, importer, copilot, demo_data)
+│  └─ tests/
+├─ frontend/       index, citizen, dashboard, incident, map, assets, admin, data-sources (+ js/, css/)
+├─ data/           civicmind_config.json · demo/ (gitignored)
+└─ docs/           SECURITY.md · CIVICMIND_INTEGRATION_CONTRACT.md · INTEGRATION_REPORT.md · DEMO_SCRIPT.md
 ```
 
 ## Deployment notes
 
-- **Docker**: `docker build -t civicmind .` then
-  `docker run -p 8000:8000 -v civicmind-data:/data -e CIVICMIND_SECRET=... civicmind`.
-  The database and evidence live in `/data`; without a volume they are lost.
-- **Render**: the free plan has an **ephemeral filesystem** — data is lost on every restart. Use a persistent
-  disk for anything beyond a throwaway demo.
-- Serve over HTTPS behind a reverse proxy (see `deploy/civicmind.service`). Set `CIVICMIND_SECRET` explicitly.
-- Login throttling is in-process; with several workers or instances, put rate limiting at the proxy too.
-- `CivicMind_Deployment_Guide.docx` describes the **previous** version: it lists the old default passwords and
-  auto-seeded accounts, which no longer exist. Follow this README until the guide is updated.
-
-## Known limitations
-
-- Ward assignment uses the nearest configured ward **centre**, not official boundary polygons.
-- Assets are points; road segments use a reference point.
-- Photo checks detect invalid, blank, tiny and re-used images only. They do not prove a repair happened.
-- Officers are not restricted by department or ward (the data model has no assignments yet).
-- SQLite, single instance. The "PostgreSQL-ready" claim from earlier versions has not been tested.
-- Real-time updates use SSE with a polling fallback; the stream polls the database every few seconds.
-- Sarvam AI has a 25 s timeout; when it is slow, submissions wait for it before falling back.
+Docker: `docker build -t civicmind .` then `docker run -p 8000:8000 -v civicmind-data:/data -e CIVICMIND_SECRET=... civicmind`.
+Serve behind HTTPS. Render's free plan has an ephemeral disk (data lost on restart). OpenStreetMap's public tile
+servers are for light use only — use a tile provider for production.
 
 ## Team
 

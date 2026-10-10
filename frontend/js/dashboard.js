@@ -1,7 +1,7 @@
 /* CivicMind — officer operations dashboard */
 const user = CM.requireAuth(['officer', 'admin']);
 const $ = (id) => document.getElementById(id);
-const C = { orange: '#E8551E', green: '#2E9E5B', blue: '#2F6FDB', purple: '#7B4FD1', red: '#D9342B', amber: '#E0A106', line: '#ECE2D3' };
+const C = { orange: '#2D63D8', green: '#1E8E57', blue: '#0F9D91', purple: '#6A4BC4', red: '#C93C3C', amber: '#C98210', line: '#DCE4EE' };
 const PALETTE = [C.orange, C.blue, C.green, C.purple, C.amber, C.red, '#3AA6A0', '#B0592F', '#7A8B99', '#C77DBA'];
 const charts = {};
 let queue = [];
@@ -29,7 +29,23 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(() => { if (!document.hidden && !$('resolveModal').innerHTML) loadDashboard(); }, 30000);
 });
 
-function loadAll() { loadDashboard(); loadCharts(); }
+function loadAll() { loadDashboard(); loadCharts(); loadUtilityFindings(); }
+
+/* Rule-based utility findings (each names its rule and triggering records). */
+async function loadUtilityFindings() {
+  const box = $('utilFindings');
+  try {
+    const rows = await CM.api('/api/utility/findings');
+    box.innerHTML = rows.slice(0, 6).map(f => `<div class="finding sev-${CM.esc(f.severity)}">
+        <div class="row spread wrap-row"><strong class="small">${CM.esc(f.rule_title)}</strong>
+          <span class="badge ${CM.sevClass(f.severity)}">${CM.esc(CM.titleCase(f.severity))}</span></div>
+        <div class="small">${CM.esc(f.explanation)}</div>
+        <div class="tiny">${f.asset_ids.map(a => `<a class="link" href="map.html?asset=${encodeURIComponent(a)}">${CM.esc(a)}</a>`).join(', ')}
+          ${f.incident_ids.map(i => ` · <a class="link" href="incident.html?id=${encodeURIComponent(i)}">incident</a>`).join('')}
+          ${f.is_synthetic ? ' · <span class="muted">synthetic data</span>' : ''}</div></div>`).join('')
+      || emptyState('No active utility findings.');
+  } catch (e) { box.innerHTML = emptyState(e.message); }
+}
 const set = (id, v) => { $(id).textContent = v; };
 
 async function loadDashboard() {

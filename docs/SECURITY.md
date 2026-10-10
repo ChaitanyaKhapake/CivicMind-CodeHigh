@@ -60,6 +60,16 @@ instead of 403 where revealing existence would leak information.
 | GET | `/api/admin/data-sources/snapshots/{id}/source-metadata` | A | reviewed snapshots only (409 otherwise); provenance at best `official_unverified` | — |
 | POST | `/api/admin/data-sources/agent-extract` | A | **disabled by default**; domain must belong to a selected candidate or the allowlist; daily cap; read-only goal | activity |
 | GET | `/citizen`, `/officer`, `/admin`, `/login` | public | redirect to the page only; every API call behind it is still authorised | — |
+| GET | `/api/utility/meta`, `/api/utility/assets[/{id}[/trace|/isolation|/history|/contacts]]` | O · A | utility topology, contacts and operational details are never civilian data; bbox ≤ 1°, hops ≤ 25 | — |
+| POST | `/api/utility/assets/{id}/copilot` | O · A | read-only; answers built from records; AI text rejected if it cites unknown IDs | — |
+| GET | `/api/incidents/{id}/utility-context` | O · A | candidates only (category + recorded geometry within 120 m) | — |
+| POST | `/api/incidents/{id}/utility-assets/{asset}/review`, `/api/incidents/{id}/briefing` | O · A | confirm / reject candidate; briefing is read-only | activity |
+| GET/POST | `/api/utility/findings[/scan|/{id}/review]` | O · A | rule-based, idempotent | activity |
+| POST | `/api/utility/import/preview` | A | validates only, nothing persisted; CRS must be EPSG:4326; ≤ 5000 records / 6 MB | — |
+| POST | `/api/utility/import/confirm` | A | transactional, idempotent (409 on repeat), never overwrites, records stored unverified | activity |
+| GET | `/api/utility/import/jobs` | A | — | — |
+| POST | `/api/utility/records/verify` | A | human verification decision with a required note | activity |
+| GET | `/api/admin/activity` | A | audit log (no secrets are written to it) | — |
 
 ## TinyFish (public data-source discovery)
 

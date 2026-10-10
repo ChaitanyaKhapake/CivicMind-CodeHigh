@@ -36,6 +36,7 @@ async function load() {
     $('loading').hidden = true; $('content').hidden = false;
     CM.hydrateImages($('content'));
     drawMini();
+    if (inc.view === 'staff') loadUtility();
   } catch (e) {
     $('loading').innerHTML = emptyState(e.status === 404 ? 'Incident not found, or you do not have access to it.' : e.message);
   }
@@ -72,6 +73,8 @@ function staffView(i) {
   <div class="detail-grid" style="margin-top:18px">
     <div>
       ${planCard(i)}
+      <section class="card" id="utilCtx" style="margin-bottom:18px"><div class="card-h"><h3>Utility network context</h3></div>
+        <p class="small muted">Loading candidate assets…</p></section>
       ${coordinationCard(i)}
       ${resolutionCard(i)}
       ${investigationCard(i)}
@@ -308,6 +311,54 @@ function reportsCard(i) {
   </section>`;
 }
 
+/* Utility network context: candidate assets come from the API (compatible type + recorded
+   geometry within a radius). They are candidates, never causes, until an officer confirms. */
+let utilCtx = null;
+async function loadUtility() {
+  const box = $('utilCtx');
+  if (!box) return;
+  try { utilCtx = await CM.api(`/api/incidents/${encodeURIComponent(inc.id)}/utility-context`); }
+  catch (e) { box.innerHTML = `<div class="card-h"><h3>Utility network context</h3></div><p class="small text-red">${CM.esc(e.message)}</p>`; return; }
+  box.innerHTML = utilityContextCard(utilCtx, inc.id);
+  const lead = utilCtx.candidates.find(c => c.link_status === 'confirmed') || utilCtx.candidates[0];
+  if (lead && $('opAsset') && !$('opAsset').value) $('opAsset').value = lead.asset_id;
+}
+
+function utilityContextCard(ctx, incId) {
+  const row = (c) => `<div class="cand ${c.link_status === 'confirmed' ? 'ok' : ''}">
+      <div class="row spread wrap-row"><strong class="small">${CM.esc(c.asset_id)} · ${CM.esc(c.name)}</strong>
+        <span class="badge ${c.link_status === 'confirmed' ? 'resolved' : 'pending'}">${CM.esc(CM.titleCase(c.link_status))}</span></div>
+      <div class="tiny muted">${CM.esc(CM.titleCase(c.utility_type))} ${CM.esc(CM.titleCase(c.asset_type))} · ${CM.esc(c.distance_m)} m · ${CM.esc(CM.titleCase(c.verification_status))}${c.is_synthetic ? ' · synthetic' : ''}</div>
+      <div class="tiny">${CM.esc(c.reason)}</div>
+      <div class="row wrap-row" style="gap:6px;margin-top:6px">
+        <a class="btn sm" href="map.html?asset=${encodeURIComponent(c.asset_id)}&incident=${encodeURIComponent(incId)}">Open on utility map</a>
+        ${c.link_status !== 'confirmed' ? `<button class="btn sm" data-act="utilReview" data-asset="${CM.esc(c.asset_id)}" data-status="confirmed">Confirm relevant</button>` : ''}
+        <button class="btn sm ghost" data-act="utilReview" data-asset="${CM.esc(c.asset_id)}" data-status="rejected">Not related</button>
+      </div></div>`;
+  return `<div class="card-h"><h3>Utility network context</h3>
+      <button class="btn sm primary" data-act="briefing">Generate incident briefing</button></div>
+    <p class="tiny muted" style="margin-top:0">${CM.esc(ctx.note)}</p>
+    ${ctx.candidates.map(row).join('') || `<p class="small muted">${CM.esc((ctx.data_gaps || []).join(' ') || 'No candidate utility assets.')}</p>`}
+    ${ctx.rejected.length ? `<p class="tiny muted">Marked not related: ${ctx.rejected.map(r => CM.esc(r.asset_id)).join(', ')}</p>` : ''}
+    <div id="briefingBox" aria-live="polite"></div>`;
+}
+
+function briefingView(b) {
+  const li = (arr, fn) => arr.length ? `<ul class="small" style="padding-left:18px;margin:4px 0">${arr.map(fn).join('')}</ul>` : '<p class="small muted">None.</p>';
+  return `<div class="trace-box">
+    <div class="row spread wrap-row"><strong>Incident briefing</strong><span class="badge">${b.engine === 'records' ? 'Built from records' : 'AI-phrased, grounded on records'}</span></div>
+    <p class="small" style="margin:6px 0">${CM.esc(b.summary)}</p>
+    <div class="eyebrow" style="margin-top:8px">Facts (from records)</div>
+    ${li(b.facts, f => `<li>${CM.esc(f.text)} ${f.refs.length ? `<span class="tiny muted">[${f.refs.slice(0, 4).map(r => CM.esc(r)).join(', ')}]</span>` : ''}</li>`)}
+    <div class="eyebrow" style="margin-top:8px">Hypotheses (unconfirmed)</div>
+    ${li(b.hypotheses, h => `<li>${CM.esc(h)}</li>`)}
+    <div class="eyebrow" style="margin-top:8px">Data gaps</div>
+    ${li(b.data_gaps, g => `<li>${CM.esc(g)}</li>`)}
+    <div class="eyebrow" style="margin-top:8px">Coordination checklist</div>
+    <ol class="small" style="padding-left:18px;margin:4px 0">${b.checklist.steps.map(s => `<li><strong>${CM.esc(s.step)}</strong> — ${CM.esc(s.detail)} <span class="tiny muted">(${CM.esc(s.owner)})</span></li>`).join('')}</ol>
+    <p class="tiny muted" style="margin:6px 0 0">${CM.esc(b.note)}</p></div>`;
+}
+
 /* Operator coordination: facts an officer records about contact with the utility
    operator. CivicMind never operates equipment; isolation is whatever the operator confirmed. */
 const ISOLATION_TEXT = { not_recorded: 'No operator contact recorded', awaiting_operator: 'Operator contacted — awaiting decision',
@@ -335,6 +386,7 @@ function coordinationCard(i) {
       <div class="field"><label class="f" for="opOrg">Operator organisation</label><input id="opOrg" maxlength="120"/></div>
       <div class="field"><label class="f" for="opRef">Operator reference</label><input id="opRef" maxlength="120"/></div>
       <div class="field"><label class="f" for="opContact">Contact record ID (optional)</label><input id="opContact" maxlength="64"/></div>
+      <div class="field"><label class="f" for="opAsset">Utility asset ID (optional)</label><input id="opAsset" maxlength="64"/></div>
     </div>
     <div class="field"><label class="f" for="opNote">Note</label><input id="opNote" maxlength="500"/></div>
     <button class="btn sm" data-act="opRecord">Record step</button>`}
@@ -452,8 +504,21 @@ async function onClick(e) {
     case 'matchNo': return run('…', () => post(`/api/complaints/${btn.dataset.id}/asset-match`, { status: 'rejected' }, 'Asset match removed'));
     case 'opRecord': return run('Recording…', () => post(`/api/incidents/${inc.id}/operator-updates`, {
       step: $('opStep').value, operator_org: $('opOrg').value.trim() || null, reference: $('opRef').value.trim() || null,
-      contact_ref: $('opContact').value.trim() || null, note: $('opNote').value.trim() || null,
+      contact_ref: $('opContact').value.trim() || null, asset_ref: $('opAsset').value.trim() || null,
+      note: $('opNote').value.trim() || null,
     }, 'Coordination step recorded'));
+    case 'utilReview': return run('…', async () => {
+      try {
+        utilCtx = await CM.api(`/api/incidents/${encodeURIComponent(inc.id)}/utility-assets/${encodeURIComponent(btn.dataset.asset)}/review`,
+          { method: 'POST', body: { status: btn.dataset.status } });
+        $('utilCtx').innerHTML = utilityContextCard(utilCtx, inc.id);
+        CM.toast(btn.dataset.status === 'confirmed' ? 'Asset confirmed as relevant' : 'Asset marked not related', 'ok');
+      } catch (ex) { CM.fail(ex); }
+    });
+    case 'briefing': return run('Preparing…', async () => {
+      try { $('briefingBox').innerHTML = briefingView(await CM.api(`/api/incidents/${encodeURIComponent(inc.id)}/briefing`, { method: 'POST' })); }
+      catch (ex) { CM.fail(ex); }
+    });
   }
 }
 

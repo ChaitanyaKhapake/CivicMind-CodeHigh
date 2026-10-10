@@ -116,6 +116,15 @@ def all_resolutions():
     return rows
 
 
+@router.get("/activity")
+def activity(limit: int = 100):
+    """Audit trail: who did what, newest first (no secrets are ever written to it)."""
+    limit = max(1, min(500, limit))
+    return query("""SELECT a.id, a.actor, a.action, a.detail, a.incident_id, a.created_at, i.public_id AS incident_public_id
+                    FROM activity a LEFT JOIN incidents i ON i.id = a.incident_id
+                    ORDER BY a.id DESC LIMIT ?""", (limit,))
+
+
 @router.post("/reset")
 def reset(body: ResetIn, admin: dict = Depends(require_admin)):
     """Clear civic data on the ISOLATED DEMO DATABASE only (users and assets kept)."""

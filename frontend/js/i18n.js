@@ -25,6 +25,7 @@ const I18N = (() => {
       a_rules: 'Rule-based suggestion', a_ai: 'AI-assisted suggestion', a_review: 'Please review everything before you submit.',
       a_too_short: 'Write at least 10 characters first.',
       a_stale: 'Your text changed after the check. Run the check again to refresh the suggestion and translation.',
+      step1: 'Submitted', step2: 'Grouped / reviewed', step3: 'Work in progress', step4: 'Resolved', next: 'Next',
     },
     hi: {
       hello: 'नमस्ते', intro: 'नागरिक समस्या दर्ज करें और समाधान तक उसकी स्थिति देखें।', language: 'भाषा',
@@ -48,6 +49,13 @@ const I18N = (() => {
       a_rules: 'नियम-आधारित सुझाव', a_ai: 'AI-सहायता प्राप्त सुझाव', a_review: 'सबमिट करने से पहले सब कुछ जाँच लें।',
       a_too_short: 'पहले कम से कम 10 अक्षर लिखें।',
       a_stale: 'जाँच के बाद आपका लेख बदल गया है। सुझाव और अनुवाद अपडेट करने के लिए फिर से जाँचें।',
+      step1: 'जमा', step2: 'समीक्षा / समूहित', step3: 'काम जारी', step4: 'हल', next: 'आगे',
+      st_submitted: 'जमा की गई', st_clustered: 'घटना में शामिल', st_in_progress: 'काम जारी', st_resolved: 'हल हुई', st_rejected: 'अस्वीकृत',
+      next_submitted: 'एक अधिकारी आपकी शिकायत देखेगा। आस-पास ऐसी ही शिकायतें आने पर उन्हें एक घटना में जोड़ा जाएगा।',
+      next_clustered: 'आपकी शिकायत एक घटना का हिस्सा है, जिस पर अधिकारी की कार्य-योजना की प्रतीक्षा है।',
+      next_in_progress: 'कार्य-योजना स्वीकृत हो गई है और काम चल रहा है।',
+      next_resolved: 'समस्या को प्रमाण फ़ोटो के साथ हल चिह्नित किया गया है। समस्या फिर हो तो दोबारा शिकायत करें।',
+      next_rejected: 'यह शिकायत बिना कार्रवाई के बंद कर दी गई।',
     },
     mr: {
       hello: 'नमस्कार', intro: 'नागरी समस्या नोंदवा आणि ती सुटेपर्यंत तिचा मागोवा घ्या.', language: 'भाषा',
@@ -71,6 +79,13 @@ const I18N = (() => {
       a_rules: 'नियमांवर आधारित सूचना', a_ai: 'AI-सहाय्यित सूचना', a_review: 'सबमिट करण्यापूर्वी सर्व तपासा.',
       a_too_short: 'आधी किमान 10 अक्षरे लिहा.',
       a_stale: 'तपासणीनंतर तुमचा मजकूर बदलला आहे. सूचना आणि भाषांतर अद्ययावत करण्यासाठी पुन्हा तपासा.',
+      step1: 'नोंदवली', step2: 'तपासणी / गटबद्ध', step3: 'काम सुरू', step4: 'सोडवली', next: 'पुढे',
+      st_submitted: 'नोंदवली', st_clustered: 'घटनेत समाविष्ट', st_in_progress: 'काम सुरू', st_resolved: 'सोडवली', st_rejected: 'नाकारली',
+      next_submitted: 'एक अधिकारी तुमची तक्रार पाहील. जवळपास अशाच तक्रारी आल्यास त्या एका घटनेत जोडल्या जातील.',
+      next_clustered: 'तुमची तक्रार एका घटनेचा भाग आहे; अधिकाऱ्याच्या कृती-आराखड्याची प्रतीक्षा आहे.',
+      next_in_progress: 'कृती-आराखडा मंजूर झाला असून काम सुरू आहे.',
+      next_resolved: 'समस्या पुराव्याच्या फोटोसह सोडवली म्हणून नोंदवली आहे. समस्या पुन्हा आल्यास पुन्हा तक्रार करा.',
+      next_rejected: 'ही तक्रार कारवाईशिवाय बंद करण्यात आली.',
     },
   };
   const LANGS = [['en', 'English'], ['hi', 'हिन्दी'], ['mr', 'मराठी']];

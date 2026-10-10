@@ -62,6 +62,63 @@ process.stdout.write(vm.runInContext('staffView(inc) + citizenView(' + JSON.stri
 """
 
 
+UTIL_HARNESS = r"""
+const fs = require('fs'), vm = require('vm');
+const ctx = { console, setTimeout, setInterval, clearInterval, URLSearchParams, encodeURIComponent,
+  location: { protocol: 'http:', search: '?id=1', pathname: '/incident.html', href: '' },
+  localStorage: { getItem: (k) => k === 'cm_user' ? JSON.stringify({ role: 'officer', name: 'O' }) : 't', setItem(){}, removeItem(){} },
+  document: { addEventListener(){}, getElementById(){ return null; }, querySelectorAll(){ return []; } },
+  navigator: {}, L: undefined };
+vm.createContext(ctx);
+for (const f of ['api.js', 'common.js', 'utility-network.js', 'incident.js']) vm.runInContext(fs.readFileSync(process.argv[2] + '/' + f, 'utf8'), ctx);
+const d = JSON.parse(process.argv[3]);
+vm.runInContext('D = ' + JSON.stringify(d), ctx);
+process.stdout.write(vm.runInContext(`UtilityLayer.renderDetail(D.detail) + UtilityLayer.renderTrace(D.trace, 'trace')
+  + UtilityLayer.renderTrace(D.iso, 'isolation') + UtilityLayer.renderAnswer(D.answer) + UtilityLayer.renderHistory(D.history)
+  + utilityContextCard(D.ctx, 1) + briefingView(D.briefing)`, ctx));
+"""
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+def test_utility_renderers_escape_untrusted_text(tmp_path):
+    a = {"asset_id": EVIL, "name": EVIL, "utility_type": EVIL, "asset_type": EVIL, "verification_status": EVIL,
+         "provenance_class": EVIL, "is_synthetic": True, "lat": 18.5, "lng": 73.8, "path": [EVIL], "side": EVIL,
+         "path_verified": False, "unverified_records": [EVIL], "hop": 1, "via": EVIL}
+    edge = {"connection_id": EVIL, "from": EVIL, "to": EVIL, "direction": "unknown", "verification_status": EVIL}
+    data = {
+        "detail": a | {"utility_label": EVIL, "criticality": EVIL, "notes": [EVIL], "operational_status": EVIL,
+                       "operator_org": EVIL, "geometry_type": EVIL, "length_m": EVIL, "attributes": {EVIL: EVIL},
+                       "data_source": {"name": EVIL}, "last_verified_at": None, "isolation_applicable": True,
+                       "connections": [{"relation": EVIL, "asset": a, "connection": edge}],
+                       "contacts": [{"organization": EVIL, "role": EVIL, "phone": EVIL, "label": EVIL, "source": EVIL,
+                                     "operational_use": False, "is_synthetic": True, "last_verified_at": None}]},
+        "trace": {"direction": "upstream", "visited_assets": [a], "edges": [edge], "possible_sources": [a],
+                  "candidate_isolation_assets": [a], "warnings": [EVIL], "unknown_links": [edge], "dead_ends": [EVIL],
+                  "note": EVIL},
+        "iso": {"upstream_candidates": [a], "downstream_candidates": [a], "sources": [a], "warnings": [EVIL],
+                "unknown_links": [edge], "note": EVIL},
+        "answer": {"answer": EVIL, "data_gaps": [EVIL], "engine": "records", "citations": ["WM-" + EVIL]},
+        "history": {"incidents": [{"id": 1, "public_id": EVIL, "title": EVIL, "status": EVIL, "link_status": EVIL,
+                                   "complaints": [{}]}],
+                    "maintenance": [{"work_type": EVIL, "outcome": EVIL, "performed_on": "2026-01-01", "record_id": EVIL}]},
+        "ctx": {"note": EVIL, "data_gaps": [EVIL], "rejected": [a],
+                "candidates": [a | {"distance_m": EVIL, "reason": EVIL, "link_status": EVIL}]},
+        "briefing": {"engine": "records", "summary": EVIL, "facts": [{"text": EVIL, "refs": [EVIL]}], "hypotheses": [EVIL],
+                     "data_gaps": [EVIL], "note": EVIL,
+                     "checklist": {"steps": [{"step": EVIL, "detail": EVIL, "owner": EVIL}]}},
+    }
+    script = tmp_path / "u.js"
+    script.write_text(UTIL_HARNESS, encoding="utf-8")
+    out = subprocess.run([NODE, str(script), JS_DIR, json.dumps(data)], capture_output=True, text=True,
+                         encoding="utf-8", timeout=60)
+    assert out.returncode == 0, out.stderr
+    html = out.stdout
+    assert len(html) > 2000
+    for raw in ("<img src=x", "<script>", "</textarea><img", "\" onerror"):
+        assert raw not in html, raw
+    assert "&lt;/textarea&gt;&lt;img src=x onerror=alert(1)&gt;" in html
+
+
 @pytest.mark.skipif(not NODE, reason="node not installed")
 def test_incident_renderer_escapes_untrusted_text(tmp_path):
     action = {"id": 1, "status": "pending", "action_text": EVIL, "assigned_team": EVIL, "department": EVIL,

@@ -105,6 +105,22 @@ def test_coordination_is_staff_only(client, make_user):
     assert make_user("officer").get("/api/incidents/999999/operator-updates").status_code == 404
 
 
+def test_audit_log_is_admin_only(client, make_user):
+    admin = make_user("admin")
+    admin.post("/api/admin/users", json={"name": "New Officer", "email": "new.officer@example.org",
+                                         "password": "password123", "role": "officer"})
+    rows = admin.get("/api/admin/activity").json()
+    assert rows and rows[0]["action"] == "user_created" and "password" not in str(rows).lower()
+    assert make_user("officer").get("/api/admin/activity").status_code == 403
+    assert make_user("citizen").get("/api/admin/activity").status_code == 403
+
+
+def test_pages_revalidate_and_api_is_not_cached(client):
+    assert client.get("/js/api.js").headers["cache-control"] == "no-cache"
+    assert client.get("/").headers["cache-control"] == "no-cache"
+    assert client.get("/api/health").headers["cache-control"] == "no-store"
+
+
 def test_no_route_operates_utilities():
     """Coordination is recorded, never executed: no write endpoint operates field equipment."""
     verbs = re.compile(r"/(operate|valve|breaker|shutoff|shut-off|isolate|switch)(/|$)", re.I)
