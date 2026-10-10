@@ -76,14 +76,20 @@
           </div>
         </div>
         <div class="field">
-          <label class="f" for="photo"><span data-i18n="photo">Photo</span> <span class="muted" id="photoReq" data-i18n="required">(required)</span></label>
-          <p class="tiny muted" style="margin:0 0 6px" data-i18n="photo_why">A photo is required so the team can see and assess the problem before visiting.</p>
-          <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" capture="environment" required/>
-          <div class="photo-preview" id="photoPreview" hidden>
-            <img id="photoImg" alt="Selected photo preview"/>
-            <button type="button" class="btn sm ghost" id="photoRemove" data-i18n="photo_remove">Remove / replace</button>
+          <span class="f"><span data-i18n="media_label">Photos or videos</span> <span class="muted" id="photoReq" data-i18n="media_req">(1 to 3 required)</span></span>
+          <p class="tiny muted" style="margin:0 0 6px" data-i18n="media_why">Add 1 to 3 photos or short videos so the team can see the problem before visiting.</p>
+          <div class="row wrap-row media-actions">
+            <label class="btn sm" for="mediaCamera" id="mediaCameraBtn"><span data-i18n="media_take_photo">📷 Take photo</span></label>
+            <label class="btn sm" for="mediaVideo" id="mediaVideoBtn"><span data-i18n="media_record_video">🎬 Record video</span></label>
+            <label class="btn sm ghost" for="mediaPick" id="mediaPickBtn"><span data-i18n="media_choose">🖼 Choose files</span></label>
+            <span class="badge" id="mediaCount" aria-live="polite">0 / 3</span>
           </div>
-          <div class="hint" data-i18n="photo_hint">JPEG, PNG or WebP, up to 5 MB. Location data inside the photo is removed.</div>
+          <input type="file" id="mediaCamera" class="sr-only" accept="image/*" capture="environment"/>
+          <input type="file" id="mediaVideo" class="sr-only" accept="video/*" capture="environment"/>
+          <input type="file" id="mediaPick" class="sr-only" multiple
+                 accept="image/jpeg,image/png,image/webp,image/heic,video/mp4,video/quicktime,video/webm,video/3gpp"/>
+          <div class="media-grid" id="mediaGrid"></div>
+          <div class="hint" id="mediaHint"></div>
         </div>
         <div id="assistPanel" class="assist-panel" hidden aria-live="polite"></div>
         <div class="field">
@@ -92,10 +98,17 @@
         </div>
         <div class="field">
           <span class="f" data-i18n="location">Location</span>
+          <div class="addr-search">
+            <input id="addrQuery" type="search" maxlength="120" autocomplete="off" enterkeyhint="search"
+                   aria-label="Search an address or landmark" data-i18n-ph="addr_search_ph"
+                   placeholder="Search an address or landmark (e.g. FC Road)"/>
+            <button type="button" class="btn sm" id="addrBtn" data-i18n="addr_search">🔍 Search</button>
+            <button type="button" class="btn sm" id="geoBtn" data-i18n="use_location">📍 Use my current location</button>
+          </div>
+          <div class="addr-results" id="addrResults" hidden></div>
           <div id="pickmap" class="pick-map" role="application" aria-label="Map: tap to set the issue location"></div>
           <div class="row spread wrap-row" style="margin-top:8px">
             <span class="hint" id="locText" data-i18n="loc_hint">Tap the map or drag the pin to the exact spot.</span>
-            <button type="button" class="btn sm" id="geoBtn" data-i18n="use_location">📍 Use my current location</button>
           </div>
           <div class="tiny muted" id="geoInfo" aria-live="polite"></div>
         </div>

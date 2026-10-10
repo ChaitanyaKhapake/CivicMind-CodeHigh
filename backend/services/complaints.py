@@ -3,9 +3,9 @@ CivicMind — complaint intake (shared by the API and the demo seeder).
 """
 import json
 
-from config import CATEGORIES, REQUIRE_ISSUE_PHOTO, CITY_NAME, CIVILIAN_LANGUAGES
+from config import CATEGORIES, REQUIRE_ISSUE_PHOTO, CITY_NAME, CIVILIAN_LANGUAGES, MEDIA_MAX_FILES
 from database import query, db, now, new_tracking_code, insert_with_public_id
-from services import ai, geo, evidence, clustering, risk, voice, assets as asset_svc
+from services import ai, geo, evidence, clustering, risk, voice, media as media_svc, assets as asset_svc
 from services.assistant import detect_language
 
 ASSISTANT_ENGINES = ("sarvam", "rules")
@@ -46,14 +46,18 @@ def validate_language(language, translation_en, assistant_engine):
     return translation_en
 
 
-LOCATION_SOURCES = ("map", "device", "device_adjusted")
+LOCATION_SOURCES = ("map", "device", "device_adjusted", "search", "search_adjusted")
 
 
 def create(user, category, description, latitude, longitude, address=None, image=None,
            created_at=None, is_synthetic=False, run_followups=True,
            language=None, translation_en=None, assistant_engine=None,
-           voice_id=None, location_source=None, location_accuracy_m=None, geocoded_address=None):
+           voice_id=None, location_source=None, location_accuracy_m=None, geocoded_address=None,
+           media_ids=None):
     description = validate(category, description, latitude, longitude, address)
+    media_ids = [m for m in (media_ids or []) if isinstance(m, str) and m]
+    if len(media_ids) + (1 if image else 0) > MEDIA_MAX_FILES:
+        raise IntakeError(f"You can attach at most {MEDIA_MAX_FILES} photos or videos.")
     translation_en = validate_language(language, translation_en, assistant_engine)
     if location_source is not None and location_source not in LOCATION_SOURCES:
         raise IntakeError("Unknown location source.")
@@ -76,8 +80,9 @@ def create(user, category, description, latitude, longitude, address=None, image
     if dup and not created_at:
         raise IntakeError(f"You already submitted this report ({dup['public_id']}).", 409,
                           {"public_id": dup["public_id"]})
-    if REQUIRE_ISSUE_PHOTO and not image:
-        raise IntakeError("A photo of the issue is required. It helps the team find and assess the problem.", 422)
+    if REQUIRE_ISSUE_PHOTO and not image and not media_ids:
+        raise IntakeError("Add at least one photo or video of the issue. It helps the team find and assess the "
+                          "problem.", 422)
 
     # Classification may also read the citizen-reviewed translation; the stored description stays original.
     cls = ai.classify_complaint(description + ("\n" + translation_en if translation_en else ""), category)
@@ -122,6 +127,21 @@ def create(user, category, description, latitude, longitude, address=None, image
                 except voice.VoiceError as e:
                     raise IntakeError(e.message, e.status)
                 conn.execute("UPDATE complaints SET voice_recording_id=? WHERE id=?", (vid, cid))
+            attached = []
+            if media_ids:
+                try:
+                    attached = media_svc.claim(conn, user, media_ids, cid, first_position=1 if photo else 0)
+                except media_svc.MediaError as e:
+                    raise IntakeError(e.message, e.status)
+                first_photo = next((r for r in attached if r["kind"] == "photo"), None)
+                if not photo and first_photo:
+                    # The first attached photo becomes the report's main photo (used by the existing checks/views).
+                    chk = json.loads(first_photo["check_json"] or "{}")
+                    conn.execute("""UPDATE complaints SET image_path=?, image_hash=?, proof_verified=?, proof_check=?
+                                    WHERE id=?""",
+                                 (first_photo["stored_name"], first_photo["sha256"],
+                                  1 if chk.get("passed") else 0, first_photo["check_json"], cid))
+                    photo = dict(chk, stored_name=None)
             match = asset_svc.match_complaint(conn, cid, final_category, latitude, longitude)
             conn.execute("""INSERT INTO notifications (user_id, complaint_id, title, message, type, created_at)
                             VALUES (?,?,?,?, 'info', ?)""",
@@ -133,6 +153,7 @@ def create(user, category, description, latitude, longitude, address=None, image
                          (user["name"], user["id"], "complaint_submitted",
                           f"{public_id} submitted ({final_category})", cid, ts))
     except Exception:
+        # Attached uploads stay unclaimed (the transaction rolled back) so the citizen can retry.
         if photo and photo.get("stored_name"):
             evidence.discard(photo["stored_name"])
         raise
@@ -155,6 +176,8 @@ def create(user, category, description, latitude, longitude, address=None, image
             "engine": cls["engine"], "fallback_reason": cls.get("ai_error"),
         },
         "photo": evidence.public_check(photo) if photo else None,
+        "attachments": {"photos": (1 if image else 0) + sum(r["kind"] == "photo" for r in attached),
+                        "videos": sum(r["kind"] == "video" for r in attached)},
         "language": {"original": language, "detected": detected, "has_translation": bool(translation_en)},
         "area": area,
         "asset_match": {"asset_code": match["asset"]["asset_code"],

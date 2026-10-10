@@ -36,15 +36,17 @@ const CM = (() => {
     return 'Request failed (' + status + ').';
   }
 
-  async function api(path, { method = 'GET', body } = {}) {
+  /** JSON API call. `raw` sends a Blob/File as-is (used for photo/video uploads). */
+  async function api(path, { method = 'GET', body, raw } = {}) {
     const headers = {};
     const token = getToken();
     if (token) headers['Authorization'] = 'Bearer ' + token;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (raw !== undefined) headers['Content-Type'] = raw.type || 'application/octet-stream';
     let res;
     try {
       res = await fetch(path.replace(/^\/+/, ''), { method, headers,
-        body: body !== undefined ? JSON.stringify(body) : undefined });
+        body: raw !== undefined ? raw : (body !== undefined ? JSON.stringify(body) : undefined) });
     } catch {
       const err = new Error('Network error — check your connection and try again.');
       err.status = 0; throw err;
@@ -75,9 +77,19 @@ const CM = (() => {
       img.alt = 'Photo unavailable'; img.classList.add('img-missing');
     }
   }
-  /** Hydrate every <img data-auth-src="..."> and <audio data-auth-src="..."> under root (private media). */
+  /** Thumbnails for a report's photos and videos (private files: call hydrateImages afterwards). */
+  function mediaThumbs(c, size = '') {
+    const list = Array.isArray(c.media) ? c.media.slice() : [];
+    if (c.has_photo && !list.some(m => m.is_main_photo)) {
+      list.unshift({ kind: 'photo', url: `/api/complaints/${Number(c.id)}/photo` });
+    }
+    return list.map(m => m.kind === 'video'
+      ? `<video class="thumb ${esc(size)}" controls preload="metadata" playsinline aria-label="Report video" data-auth-src="${esc(m.url)}"></video>`
+      : `<img class="thumb ${esc(size)}" alt="Report photo" data-auth-src="${esc(m.url)}"/>`).join('');
+  }
+  /** Hydrate every <img|audio|video data-auth-src="..."> under root (private media). */
   function hydrateImages(root = document) {
-    root.querySelectorAll('img[data-auth-src], audio[data-auth-src]').forEach(el => {
+    root.querySelectorAll('img[data-auth-src], audio[data-auth-src], video[data-auth-src]').forEach(el => {
       const u = el.getAttribute('data-auth-src'); el.removeAttribute('data-auth-src'); authImage(el, u);
     });
   }
@@ -178,7 +190,7 @@ const CM = (() => {
   const fmtDay = (ts) => { const d = parseTs(ts); return d ? d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'; };
 
   return { api, getToken, getUser, setSession, clearSession, toast, fail, busy, requireAuth, homeFor, logout,
-           authImage, hydrateImages, fileToDataURL, esc, pClass, sevClass, sClass, statusText, titleCase, num,
+           authImage, hydrateImages, mediaThumbs, fileToDataURL, esc, pClass, sevClass, sClass, statusText, titleCase, num,
            engineLabel, checkLabel, timeAgo, fmtDate, fmtDay, parseTs };
 })();
 

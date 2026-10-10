@@ -251,6 +251,15 @@ VOICE_UNLINKED_TTL_HOURS = _env_int("CIVICMIND_VOICE_UNLINKED_TTL_HOURS", 24, 1,
 VOICE_RETENTION_DAYS = _env_int("CIVICMIND_VOICE_RETENTION_DAYS", 90, 1, 3650)
 
 # ---------------------------------------------------------------------------
+# Report attachments: up to MEDIA_MAX_FILES photos or short videos per report.
+# Videos are uploaded as raw bytes (no base64) to a dedicated endpoint.
+# ---------------------------------------------------------------------------
+MEDIA_MAX_FILES = 3
+MEDIA_MAX_VIDEO_BYTES = _env_int("CIVICMIND_MEDIA_MAX_VIDEO_BYTES", 30 * 1024 * 1024, 1_000_000, 100 * 1024 * 1024)
+MEDIA_MAX_VIDEO_SECONDS = float(_env_int("CIVICMIND_MEDIA_MAX_VIDEO_SECONDS", 30, 5, 300))
+MEDIA_UNLINKED_TTL_HOURS = VOICE_UNLINKED_TTL_HOURS
+
+# ---------------------------------------------------------------------------
 # Reverse geocoding for "Use my current location". OFF unless deliberately
 # enabled. The public Nominatim service has a usage policy (max 1 request/s
 # per application, identifying User-Agent, caching, attribution, explicit
@@ -258,6 +267,8 @@ VOICE_RETENTION_DAYS = _env_int("CIVICMIND_VOICE_RETENTION_DAYS", 90, 1, 3650)
 # ---------------------------------------------------------------------------
 REVERSE_GEOCODER = _env("CIVICMIND_REVERSE_GEOCODER", "none").strip().lower()   # none | nominatim
 REVERSE_GEOCODER_URL = _env("CIVICMIND_REVERSE_GEOCODER_URL", "https://nominatim.openstreetmap.org/reverse").strip()
+# Address search ("search an address" box) uses the same switch and provider.
+GEOCODER_SEARCH_URL = _env("CIVICMIND_GEOCODER_SEARCH_URL", "https://nominatim.openstreetmap.org/search").strip()
 REVERSE_GEOCODER_USER_AGENT = _env("CIVICMIND_REVERSE_GEOCODER_USER_AGENT",
                                    "CivicMind/0.5 (Build with Bharat 4.0 hackathon prototype)").strip()
 

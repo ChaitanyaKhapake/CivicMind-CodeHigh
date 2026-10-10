@@ -100,6 +100,7 @@ def test_citizen_card_escapes_untrusted_text(tmp_path):
          "language": {"translation_en": EVIL}, "estimate": {"kind": EVIL, "at": None, "basis": EVIL},
          "voice": {"transcript": EVIL, "transcription_status": EVIL},
          "resolution_photos": [{"url": EVIL, "label": EVIL}],
+         "media": [{"kind": "video", "url": EVIL}, {"kind": EVIL, "url": EVIL, "is_main_photo": False}],
          "history": [{"label": EVIL, "at": "2026-01-01 00:00:00"}]}
     script = tmp_path / "c.js"
     script.write_text(CITIZEN_HARNESS, encoding="utf-8")
@@ -177,7 +178,8 @@ def test_incident_renderer_escapes_untrusted_text(tmp_path):
         "complaints": [{"id": 1, "public_id": EVIL, "category": EVIL, "description": EVIL, "status": "clustered",
                         "severity": 3, "latitude": 18.5, "longitude": 73.8, "created_at": "2026-01-01 00:00:00",
                         "citizen_name": EVIL, "has_photo": False, "asset_match": None, "is_synthetic": False,
-                        "language": {"original": "mr", "translation_en": EVIL}}],
+                        "language": {"original": "mr", "translation_en": EVIL},
+                        "media": [{"kind": "video", "url": EVIL}, {"kind": "photo", "url": EVIL}]}],
         "coordination": {"isolation_status": "awaiting_operator", "safety_note": EVIL,
                          "steps": [{"key": EVIL, "label": EVIL}],
                          "updates": [{"step_label": EVIL, "operator_org": EVIL, "reference": EVIL,

@@ -11,6 +11,9 @@ cd "$ROOT/backend"
 export CIVICMIND_DB="$ROOT/data/demo/civicmind_demo.db"
 export CIVICMIND_EVIDENCE_DIR="$ROOT/data/demo/evidence"
 export CIVICMIND_DEMO_MODE=1
+# Address search + current-location address autofill via public Nominatim (OpenStreetMap;
+# max 1 request/s, explicit clicks only). Set CIVICMIND_REVERSE_GEOCODER=none to turn off.
+export CIVICMIND_REVERSE_GEOCODER="${CIVICMIND_REVERSE_GEOCODER:-nominatim}"
 
 python3 -m pip install -q -r requirements.txt
 python3 seed_demo.py --db "$CIVICMIND_DB" "$@"

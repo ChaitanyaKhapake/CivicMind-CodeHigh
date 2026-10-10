@@ -525,6 +525,33 @@ ul.reasons li { margin: 1px 0; }
 @media (prefers-reduced-motion: reduce) { .rec-dot .pulse { animation: none; } }
 .photo-preview { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
 .photo-preview img { width: 140px; height: 105px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); }
+
+/* report attachments (≤ 3 photos / videos) */
+.media-actions { gap: 6px; align-items: center; }
+.media-actions label.btn { cursor: pointer; }
+.media-actions label.btn.is-disabled { opacity: .45; pointer-events: none; }
+.media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; margin-top: 8px; }
+.media-grid:empty { display: none; }
+.media-tile { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--bg-2); }
+.media-tile img, .media-tile video { display: block; width: 100%; height: 92px; object-fit: cover; background: #0b1220; }
+.media-tile .mt-bar { display: flex; justify-content: space-between; align-items: center; gap: 4px; padding: 4px 6px; font-size: .72rem; }
+.media-tile .mt-kind { position: absolute; top: 4px; left: 4px; background: rgba(23, 43, 77, .78); color: #fff; border-radius: 6px; padding: 1px 6px; font-size: .7rem; }
+.media-tile.is-error { border-color: var(--high, #c0392b); }
+.media-tile.is-error .mt-state { color: var(--high, #c0392b); }
+.media-tile.is-busy img, .media-tile.is-busy video { opacity: .55; }
+.media-tile .mt-remove { border: 0; background: none; color: var(--primary); cursor: pointer; font-size: .72rem; padding: 0; }
+.media-row { display: flex; flex-wrap: wrap; gap: 6px; }
+video.thumb { background: #0b1220; }
+
+/* address search above the location map */
+.addr-search { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.addr-search input { flex: 1 1 220px; min-width: 0; }
+.addr-results { border: 1px solid var(--line); border-radius: 10px; background: var(--card, #fff); margin-bottom: 8px; overflow: hidden; }
+.addr-results .ar-head { padding: 6px 10px; font-size: .78rem; color: var(--ink-3); }
+.addr-results button { display: block; width: 100%; text-align: left; border: 0; border-top: 1px solid var(--line); background: none;
+  padding: 8px 10px; font: inherit; font-size: .85rem; color: var(--ink); cursor: pointer; }
+.addr-results button:hover, .addr-results button:focus-visible { background: var(--bg-2); }
+.addr-results .ar-note { display: block; font-size: .72rem; color: var(--ink-3); }
 .review-panel { margin-top: 4px; border-color: var(--primary-100); }
 .chat-log { max-height: 280px; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
 .chat-msg { display: flex; flex-direction: column; gap: 6px; max-width: 92%; }

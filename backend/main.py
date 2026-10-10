@@ -24,11 +24,11 @@ from fastapi.staticfiles import StaticFiles  # noqa: E402
 import config  # noqa: E402
 from config import FRONTEND_DIR, CITY_NAME, CITY_CENTER, CORS_ORIGINS, MAX_REQUEST_BYTES  # noqa: E402
 from database import init_db, query, is_demo_db  # noqa: E402
-from services import bootstrap, ai, voice  # noqa: E402
+from services import bootstrap, ai, voice, media  # noqa: E402
 from services.tinyfish import provider_status  # noqa: E402
 from routes import (auth_routes, complaints, incidents, actions, dashboard, admin,  # noqa: E402
                     realtime, config_routes, infrastructure, data_sources, assistant, coordination,
-                    utility_network, workorders, voice_geo)
+                    utility_network, workorders, voice_geo, media as media_routes)
 
 log = logging.getLogger("civicmind")
 
@@ -52,6 +52,7 @@ async def lifespan(_app):
     init_db()
     result = bootstrap.bootstrap()
     voice.purge()  # retention policy for voice recordings
+    media.purge()  # uploads never attached to a report
     print(f"[CivicMind] Database: {config.DB_PATH}{'  (DEMO database)' if is_demo_db() else ''}")
     print(f"[CivicMind] Bootstrap: {result}")
     print("[CivicMind] AI engine: " + (f"Sarvam AI ({ai.SARVAM_CHAT_MODEL}) with rule-based fallback"
@@ -101,7 +102,9 @@ class GuardMiddleware:
             declared = int(headers.get(b"content-length", b"0") or 0)
         except ValueError:
             declared = 0
-        if declared > MAX_REQUEST_BYTES:
+        # Photo/video uploads are raw bytes on one route with its own (larger) cap.
+        limit = media_routes.UPLOAD_LIMIT if scope["path"] == media_routes.UPLOAD_PATH else MAX_REQUEST_BYTES
+        if declared > limit:
             return await _too_large(send)
         seen = 0
 
@@ -110,7 +113,7 @@ class GuardMiddleware:
             msg = await receive()
             if msg["type"] == "http.request":
                 seen += len(msg.get("body", b""))
-                if seen > MAX_REQUEST_BYTES:
+                if seen > limit:
                     raise _BodyTooLarge()
             return msg
 
@@ -183,7 +186,7 @@ def health():
 
 
 for r in (config_routes, auth_routes, complaints, incidents, actions, dashboard, admin,
-          realtime, infrastructure, data_sources, assistant, coordination, utility_network, workorders, voice_geo):
+          realtime, infrastructure, data_sources, assistant, coordination, utility_network, workorders, voice_geo, media_routes):
     app.include_router(r.router)
 
 # Short portal entry points. They only pick a page; every API call behind the

@@ -14,7 +14,7 @@ connected to any municipal system**; demo data is fictional and labelled as such
 
 | Portal | Entry | For | Highlights |
 |---|---|---|---|
-| Citizen | `/citizen` → `citizen.html` | residents | EN/HI/MR interface, **civic help chatbot**, **15-second voice description with editable transcript**, **mandatory photo** with preview, **"Use my current location"**, review-before-submit, private tracking code, status history, estimated / scheduled / actual completion, resolution photos |
+| Citizen | `/citizen` → `citizen.html` | residents | EN/HI/MR interface, **civic help chatbot**, **15-second voice description with editable transcript**, **1–3 photos or videos** (at least one required), **address search** and **"Use my current location"** with address autofill, review-before-submit, private tracking code, status history, estimated / scheduled / actual completion, resolution photos |
 | Officer | `/officer` → `dashboard.html`, `map.html`, `incident.html` | municipal staff | priority queue, overdue / awaiting-verification metrics, live map with **utility layers**, **network tracing**, isolation candidates, **Utility Copilot**, incident briefing, operator coordination, **work orders with contractors, progress, before/after evidence and accept/reject verification**, voice transcripts |
 | Admin | `/admin` → `admin.html`, `data-sources.html` | administrators | users (role, department, access), departments, contractors, citywide analytics, utility registry (connections, contacts, status, verification), **GeoJSON/CSV import with preview → confirm → rollback**, TinyFish public-source discovery, findings, audit log |
 
@@ -127,11 +127,17 @@ imported as geometry automatically, and is at best `official_unverified`.
   transcript is AI output, shown for editing and stored separately from the citizen's description. Audio is
   deleted 90 days after resolution (unattached recordings after 24 h). Without a Sarvam key the recording is
   kept and the citizen types the description.
-- **Photo**: mandatory (`require_issue_photo` in the config), JPEG/PNG/WebP ≤ 5 MB, content-validated, EXIF/GPS
-  removed, private.
-- **Location**: map pin, or "Use my current location" (browser permission; accuracy shown; pin adjustable).
-  An address suggestion appears only if reverse geocoding is enabled (`CIVICMIND_REVERSE_GEOCODER=nominatim`,
-  off by default because of the Nominatim usage policy); otherwise the citizen types a landmark.
+- **Photos / videos**: 1 to 3 per report (at least one required by `require_issue_photo`). Take a photo, record a
+  video or choose files; each file uploads as it is added and can be removed before submitting. The server decides
+  the type from the file's bytes: photos (JPEG/PNG/WebP ≤ 5 MB; large phone photos are shrunk in the browser
+  first) are re-encoded, which removes EXIF/GPS; videos (MP4/MOV/3GP/WebM ≤ 30 MB) are parsed — a video track is
+  required and, when the file declares its length, it must be ≤ 30 s. MP4/MOV location tags are blanked; other
+  metadata inside videos is not removed (no re-encoding). All files are private (owner + staff).
+- **Location**: map pin, **address search** (type an address or landmark → choose a result → the pin moves and
+  the address is filled in), or **"Use my current location"** (browser permission; accuracy shown; the address is
+  filled in). Both lookups use the public Nominatim service and are switched by `CIVICMIND_REVERSE_GEOCODER`:
+  **on in the demo launchers**, off by default otherwise (Nominatim policy: ≤ 1 request/s, explicit user action,
+  attribution). With it off, the search still finds ward names (approximate centres) and the citizen sets the pin.
 - **Review step** before submitting; the tracking code is shown only after the server saved the report.
 - **Tracking**: status history (citizen-safe labels, no internal notes), estimate shown as *estimated* (approved
   plan's hours), *scheduled* (work-order date), *actual* (resolution time) or *pending* — never invented.
@@ -196,7 +202,9 @@ traces; API keys only on the server. Rotate any credential that was ever shared 
 - Utility data in the demo is synthetic; no official GIS dataset is connected.
 - The Copilot waits for Sarvam (up to its 25 s timeout) before falling back to the record-based answer.
 - Speech-to-text accuracy has not been measured; transcripts must be checked by the citizen.
-- Address autofill is off unless deliberately enabled; then it depends on the public Nominatim service.
+- Address search/autofill depends on the public Nominatim service (enabled in the demo launchers); results are
+  limited to the service area. Video length is checked only when the file declares it (browser recordings in
+  WebM often do not; the 30 MB cap still applies).
 - Shapefile/KML import, PDF extraction and editable categories / rule thresholds are not implemented
   (configuration stays in `data/civicmind_config.json`).
 - Officers are not yet restricted to their own department's incidents (departments are recorded, not enforced).

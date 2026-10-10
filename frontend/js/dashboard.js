@@ -208,7 +208,7 @@ async function openResolve(id) {
         <div class="card-h"><h3 id="mTitle">Resolve ${CM.esc(c.public_id)}</h3>
           <button class="btn sm ghost" id="mClose" aria-label="Close">✕</button></div>
         <div class="complaint-body">
-          ${c.has_photo ? `<img class="thumb lg" alt="Citizen photo" data-auth-src="/api/complaints/${Number(c.id)}/photo"/>` : '<div class="thumb lg img-missing">No photo</div>'}
+          ${c.has_photo || (c.media || []).length ? `<div class="media-row" style="max-width:300px">${CM.mediaThumbs(c, 'lg')}</div>` : '<div class="thumb lg img-missing">No photo or video</div>'}
           <div>
             <div class="row wrap-row" style="gap:6px"><span class="badge cat">${CM.esc(c.category)}</span><span class="badge">${CM.esc(c.ward || '')}</span>${syntheticTag(c.is_synthetic)}</div>
             <p class="small" style="margin:8px 0 0">${CM.esc(c.description)}</p>

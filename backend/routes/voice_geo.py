@@ -4,6 +4,7 @@
   GET  /api/voice/policy               any signed-in user (retention / provider disclosure)
   GET  /api/complaints/{id}/voice      complaint owner, officer, admin (private audio)
   GET  /api/geo/reverse?lat=&lng=      any signed-in user; opt-in provider; throttled
+  GET  /api/geo/search?q=              any signed-in user; ward names offline + opt-in provider; throttled
 """
 import threading
 import time
@@ -77,3 +78,10 @@ def reverse(lat: float = Query(..., ge=-90, le=90), lng: float = Query(..., ge=-
             user: dict = Depends(current_user)):
     _throttle(("geo", user["id"]), 6, 60)
     return geocode.reverse(lat, lng)
+
+
+@router.get("/geo/search")
+def search(q: str = Query(..., min_length=1, max_length=120), lang: str = Query("en", max_length=5),
+           user: dict = Depends(current_user)):
+    _throttle(("geo", user["id"]), 6, 60)
+    return geocode.search(q, lang)

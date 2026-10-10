@@ -296,7 +296,7 @@ function reportsCard(i) {
     <div class="scroll-list">
     ${i.complaints.map(c => `
       <div class="report-item">
-        ${c.has_photo ? `<img class="thumb" alt="Report photo" data-auth-src="/api/complaints/${Number(c.id)}/photo"/>` : ''}
+        <div class="media-row" style="max-width:200px">${CM.mediaThumbs(c)}</div>
         <div class="grow">
           <div class="row wrap-row" style="gap:6px"><strong class="small">${CM.esc(c.public_id)}</strong>
             <span class="badge ${CM.sClass(c.status)}">${CM.esc(CM.statusText(c.status))}</span>${syntheticTag(c.is_synthetic)}</div>

@@ -94,7 +94,8 @@ def _seen_before(sha):
         """SELECT 1 FROM complaints WHERE image_hash=:h OR resolution_image_hash=:h
            UNION SELECT 1 FROM actions WHERE image_hash=:h
            UNION SELECT 1 FROM resolutions WHERE image_hash=:h
-           UNION SELECT 1 FROM work_order_evidence WHERE image_hash=:h LIMIT 1""", {"h": sha}, one=True))
+           UNION SELECT 1 FROM work_order_evidence WHERE image_hash=:h
+           UNION SELECT 1 FROM complaint_media WHERE sha256=:h LIMIT 1""", {"h": sha}, one=True))
 
 
 def _flags(meta, kind, issue_hashes):

@@ -15,8 +15,9 @@ working · **BLOCKED** could not be verified (reason given) · **NOT IMPLEMENTED
 | Citizen multilingual intake (EN/HI/MR) | PASS (rule-based) · PARTIAL (AI) | Labels, statuses and next steps localised; Hindi/Marathi rule classification; original text preserved; translation only via AI and only when citizen-reviewed. Sarvam path tested with a mocked transport only. |
 | Civic help chatbot | PASS (knowledge base) · PARTIAL (AI phrasing) | Tests: own-complaints only, draft never submits, emergency → 112, AI text adding numbers/links rejected (mocked). Browser: Marathi answer and leak draft. Live AI rephrasing not characterised. |
 | Voice description (15 s) + STT | PASS (validation, storage, privacy) · PARTIAL (STT) | Tests: WAV format/duration limits, single-use link, owner/staff-only playback, purge, mocked Sarvam response. One **live Sarvam STT call** made with a 2 s test tone → `status: empty` (endpoint, auth and format accepted). Transcription of real speech and its accuracy **not verified**. |
-| Mandatory photo + preview/remove | PASS | 422 without a photo (test); preview/remove/replace checked in the browser. |
-| "Use my current location" | PASS (device + pin provenance) · PARTIAL (address) | Location source/accuracy stored (test). Reverse geocoding tested with a mocked provider only; **off by default**, live Nominatim call not made. |
+| 1–3 photos or videos per report | PASS | 10 tests (MP4/MOV/WebM parsing, duration limit, no-video-track, damaged files, location tag blanked, size caps, 3-file limit, single-use tokens, ownership, private playback, purge, re-use as proof refused). Browser: 2 photos + a real browser-recorded WebM uploaded, reviewed, submitted (CMP-00011), shown and played on the report card. Video length is only enforced when the file declares it. |
+| "Use my current location" + address autofill | PASS (live) | Live Nominatim reverse lookup verified on 2026-10-10 from the demo (simulated device position in the preview pane; real phone GPS not tested). Enabled in the demo launchers; off by default elsewhere. |
+| Address search → pin + address | PASS (live) | Live Nominatim search ("Fergusson College Road") returned a Pune result; choosing it moved the pin and filled the address. Tests: bounded/viewbox request, out-of-area results dropped, cache, throttle, offline ward-name fallback. |
 | Review step, tracking ID, status history, estimate, resolution photos | PASS | Tests for history labels (no internal notes to citizens), estimate kinds actual/scheduled/estimated/pending; browser check of review → edit (nothing submitted) and report cards. |
 | Work orders + contractors | PASS | Lifecycle test (create → start → progress → after-photo → submit → reject → resubmit → accept → incident verified), invalid transitions 409, citizen access limits, cancel, overdue metric; browser check of WO-00001. |
 | Officer dashboard metrics (overdue, awaiting verification) | PASS | Computed from records; browser check. |
@@ -42,11 +43,12 @@ working · **BLOCKED** could not be verified (reason given) · **NOT IMPLEMENTED
 
 ## Test run (executed)
 
-`cd backend && python -m pytest` → **205 passed, 0 skipped** (Windows, Python 3.14.3, Node 25.8.1).
+`cd backend && python -m pytest` → **215 passed, 0 skipped** (Windows, Python 3.14.3, Node 25.8.1).
 
 | File | Tests |
 |---|---|
 | test_tinyfish.py | 65 |
+| test_media_and_search.py | 10 |
 | test_ai_and_integrity.py | 18 |
 | test_auth_permissions.py | 22 |
 | test_utility_network.py | 17 |
@@ -81,7 +83,7 @@ working · **BLOCKED** could not be verified (reason given) · **NOT IMPLEMENTED
 2. **Live Sarvam behaviour** of the Copilot/briefing phrasing was not characterised; the record-based fallback works.
    The Copilot can wait up to the Sarvam timeout (25 s) before answering.
 3. Shapefile/KML/PDF import, editable configuration and department-scoped officer access are not implemented.
-   Speech-to-text accuracy on real speech and live reverse geocoding are unverified.
+   Speech-to-text accuracy on real speech is unverified; location autofill was verified live with a simulated device position, not on a phone.
 3a. The demo DB seeded before photos became mandatory keeps its older photo-less reports; the synthetic Marathi
    voice transcript appears only after `run_demo.bat --reset`. Estimate basis text is English-only.
 4. Legacy `POST /api/assets/import` (point registry) still saves without a preview; it is labelled as such in the UI.

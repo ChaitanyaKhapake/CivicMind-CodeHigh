@@ -18,8 +18,9 @@ from pydantic import BaseModel, Field
 from auth import current_user, require_citizen, require_officer, is_staff
 from database import query, execute
 from services import ai, evidence, complaints as intake, assets as asset_svc
-from services import actions as actions_svc, voice as voice_svc, workorders as wo_svc
+from services import actions as actions_svc, voice as voice_svc, workorders as wo_svc, media as media_svc
 from routes.common import owner_complaint, staff_complaint, raise_from, safe_json
+from config import MEDIA_MAX_FILES
 
 router = APIRouter(prefix="/api", tags=["complaints"])
 MAX_IMAGE_CHARS = 7_200_000  # ~5 MB of base64
@@ -40,6 +41,7 @@ class ComplaintIn(BaseModel):
     location_source: str | None = Field(default=None, max_length=20)
     location_accuracy_m: float | None = None
     geocoded_address: str | None = Field(default=None, max_length=300)
+    media_ids: list[str] | None = Field(default=None, max_length=MEDIA_MAX_FILES)
 
 
 class ResolveIn(BaseModel):
@@ -80,7 +82,8 @@ def create_complaint(body: ComplaintIn, user: dict = Depends(require_citizen)):
                              body.address, body.image, language=body.language,
                              translation_en=body.translation_en, assistant_engine=body.assistant_engine,
                              voice_id=body.voice_id, location_source=body.location_source,
-                             location_accuracy_m=body.location_accuracy_m, geocoded_address=body.geocoded_address)
+                             location_accuracy_m=body.location_accuracy_m, geocoded_address=body.geocoded_address,
+                             media_ids=[m[:64] for m in (body.media_ids or [])])
     except intake.IntakeError as e:
         raise_from(e)
 
@@ -173,6 +176,7 @@ def _tracking(c, staff):
         if wo:
             wo_status = {"status": wo["status"], "department": wo["department"]}
     return {"history": history, "estimate": estimate, "voice": voice_svc.for_complaint(c["id"]),
+            "media": media_svc.for_complaint(c["id"]),
             "resolution_photos": photos, "work_order": wo_status,
             "location": {"source": c.get("location_source"), "accuracy_m": c.get("location_accuracy_m"),
                          "geocoded_address": c.get("geocoded_address")}}

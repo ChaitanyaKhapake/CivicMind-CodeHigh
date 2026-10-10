@@ -422,6 +422,27 @@ CREATE TABLE IF NOT EXISTS voice_recordings (
     audio_deleted_at TEXT
 );
 
+-- Up to MEDIA_MAX_FILES photos/videos per complaint. Uploaded first (validated,
+-- private), then claimed by the complaint with a single-use token.
+CREATE TABLE IF NOT EXISTS complaint_media (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    token        TEXT NOT NULL UNIQUE,
+    user_id      INTEGER NOT NULL REFERENCES users(id),
+    complaint_id INTEGER REFERENCES complaints(id) ON DELETE SET NULL,
+    kind         TEXT NOT NULL,          -- photo | video
+    stored_name  TEXT NOT NULL,
+    mime         TEXT NOT NULL,
+    bytes        INTEGER NOT NULL,
+    width        INTEGER,
+    height       INTEGER,
+    duration_s   REAL,                   -- NULL when the video file does not declare it
+    sha256       TEXT NOT NULL,
+    check_json   TEXT,                   -- photo: automated check result
+    position     INTEGER,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    linked_at    TEXT
+);
+
 -- Officer-recorded coordination with utility operators (water-leak response
 -- etc.). Human-entered facts only: the app never operates a utility.
 CREATE TABLE IF NOT EXISTS incident_operator_updates (
@@ -494,6 +515,9 @@ INDEXES = [
     "CREATE INDEX IF NOT EXISTS ix_wo_evidence ON work_order_evidence(work_order_id)",
     "CREATE INDEX IF NOT EXISTS ix_wo_evidence_hash ON work_order_evidence(image_hash)",
     "CREATE INDEX IF NOT EXISTS ix_voice_user ON voice_recordings(user_id, complaint_id)",
+    "CREATE INDEX IF NOT EXISTS ix_media_complaint ON complaint_media(complaint_id, position)",
+    "CREATE INDEX IF NOT EXISTS ix_media_user ON complaint_media(user_id, complaint_id)",
+    "CREATE INDEX IF NOT EXISTS ix_media_hash ON complaint_media(sha256)",
 ]
 
 

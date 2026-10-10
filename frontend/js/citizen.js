@@ -6,6 +6,8 @@ let CFG = { categories: [], city_center: { lat: 18.5204, lng: 73.8567 }, require
 let assist = null, assistStale = false;   // last assistant suggestion (never submitted automatically)
 let locSource = 'map', locAccuracy = null, geocoded = null;   // how the pin was set (stored with the report)
 let recorder = null, voice = null;          // voice: { id, transcript, status } after upload
+let media = [];                             // attachments: { key, kind, url, id, state, msg }
+let LIMITS = { max_files: 3, max_photo_mb: 5, max_video_mb: 30, max_video_seconds: 30 };
 const LANG_KEY = 'cm_lang';
 
 const STEPS = () => [I18N.t('step1'), I18N.t('step2'), I18N.t('step3'), I18N.t('step4')];
@@ -20,7 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderNav('citizen.html', user);
   try { CFG = await CM.api('/api/config'); } catch (e) { CM.fail(e); }
   CFG.categories.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = c; $('category').appendChild(o); });
-  if (CFG.require_issue_photo) $('photo').required = true;
+  try { LIMITS = { ...LIMITS, ...(await CM.api('/api/media/policy')) }; } catch { /* defaults above */ }
   initLanguage();
   pickLat = CFG.city_center.lat; pickLng = CFG.city_center.lng;
   initPicker();
@@ -29,13 +31,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     markAssistStale();
   });
   $('assistBtn').addEventListener('click', runAssistant);
+  $('address').addEventListener('input', () => { addressAutofilled = false; });
   $('reportForm').addEventListener('submit', reviewComplaint);
   $('reviewEdit').addEventListener('click', () => { $('reviewPanel').hidden = true; $('reportForm').hidden = false; });
   $('reviewSend').addEventListener('click', sendComplaint);
   $('trackForm').addEventListener('submit', trackComplaint);
   $('geoBtn').addEventListener('click', useGeo);
-  $('photo').addEventListener('change', previewPhoto);
-  $('photoRemove').addEventListener('click', () => { $('photo').value = ''; previewPhoto(); $('photo').click(); });
+  ['mediaCamera', 'mediaVideo', 'mediaPick'].forEach(id => $(id).addEventListener('change', (e) => addMediaFiles(e.target)));
+  $('mediaGrid').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-remove]'); if (b) removeMedia(b.getAttribute('data-remove'));
+  });
+  $('addrBtn').addEventListener('click', searchAddress);
+  $('addrQuery').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchAddress(); } });
+  $('addrResults').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-pick]'); if (b) pickAddress(Number(b.getAttribute('data-pick')));
+  });
+  renderMedia();
   $('recBtn').addEventListener('click', startRecording);
   $('recStop').addEventListener('click', () => recorder && recorder.stop());
   $('recDiscard').addEventListener('click', discardRecording);
@@ -66,7 +77,7 @@ function initLanguage() {
 }
 function applyLanguage(lang) {
   I18N.apply(lang);
-  if (CFG.require_issue_photo) $('photoReq').textContent = I18N.t('required');
+  renderMedia();
   if (pinSet) $('locText').textContent = `📍 ${pickLat.toFixed(5)}, ${pickLng.toFixed(5)}`;
 }
 
@@ -126,15 +137,16 @@ function initPicker() {
   pickMap = L.map('pickmap').setView([pickLat, pickLng], 13);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(pickMap);
   pickMarker = L.marker([pickLat, pickLng], { draggable: true }).addTo(pickMap);
-  pickMarker.on('dragend', () => setPin(pickMarker.getLatLng().lat, pickMarker.getLatLng().lng, false));
-  pickMap.on('click', e => setPin(e.latlng.lat, e.latlng.lng, false));
+  pickMarker.on('dragend', () => setPin(pickMarker.getLatLng().lat, pickMarker.getLatLng().lng));
+  pickMap.on('click', e => setPin(e.latlng.lat, e.latlng.lng));
   setTimeout(() => pickMap.invalidateSize(), 200);
 }
-function setPin(lat, lng, fromDevice) {
+function setPin(lat, lng, source) {
   pickLat = lat; pickLng = lng; pinSet = true;
   if (pickMarker) pickMarker.setLatLng([lat, lng]);
-  if (fromDevice) locSource = 'device';
-  else if (locSource === 'device' || locSource === 'device_adjusted') locSource = 'device_adjusted';
+  if (source === 'device' || source === 'search') locSource = source;
+  else if (locSource.startsWith('device')) locSource = 'device_adjusted';
+  else if (locSource.startsWith('search')) locSource = 'search_adjusted';
   else locSource = 'map';
   $('locText').textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 }
@@ -145,14 +157,16 @@ function useGeo() {
   navigator.geolocation.getCurrentPosition(async (p) => {
     const { latitude: lat, longitude: lng, accuracy } = p.coords;
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) { info.textContent = I18N.t('geo_failed'); return; }
-    setPin(lat, lng, true); locAccuracy = Math.round(accuracy || 0) || null;
+    setPin(lat, lng, 'device'); locAccuracy = Math.round(accuracy || 0) || null;
     if (pickMap) pickMap.setView([lat, lng], 17);
     info.textContent = I18N.t('geo_found') + (locAccuracy ? ` (±${locAccuracy} m)` : '') + ' ' + I18N.t('geo_adjust');
     try {
       const g = await CM.api(`/api/geo/reverse?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`);
       if (g.available) {
         geocoded = g.address;
-        if (!$('address').value.trim()) $('address').value = (g.landmark || g.address).slice(0, 300);
+        if (!$('address').value.trim() || addressAutofilled) {
+          $('address').value = (g.landmark || g.address).slice(0, 300); addressAutofilled = true;
+        }
         info.textContent += ' ' + I18N.t('geo_address') + ' ' + g.address + ' — ' + g.attribution;
       } else {
         geocoded = null; info.textContent += ' ' + (g.message || I18N.t('geo_no_address'));
@@ -163,15 +177,120 @@ function useGeo() {
   }, { timeout: 12000, enableHighAccuracy: true, maximumAge: 30000 });
 }
 
-/* ---------- photo (mandatory) ---------- */
-function previewPhoto() {
-  const f = $('photo').files[0];
-  const box = $('photoPreview');
-  if (!f) { box.hidden = true; $('photoImg').removeAttribute('src'); return; }
-  if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size > 5 * 1024 * 1024) {
-    $('photo').value = ''; box.hidden = true; CM.toast(I18N.t('photo_invalid'), 'err'); return;
+/* ---------- address search (explicit search only; the pin stays authoritative) ---------- */
+let addrResults = [], addressAutofilled = false;
+async function searchAddress() {
+  const q = $('addrQuery').value.trim(), box = $('addrResults');
+  if (q.length < 3) { $('addrQuery').focus(); return; }
+  box.hidden = false; box.innerHTML = `<div class="ar-head">${CM.esc(I18N.t('addr_searching'))}</div>`;
+  try {
+    const d = await CM.api(`/api/geo/search?q=${encodeURIComponent(q)}&lang=${encodeURIComponent(I18N.lang)}`);
+    addrResults = d.results || [];
+    if (!addrResults.length) { box.innerHTML = `<div class="ar-head">${CM.esc(d.message || I18N.t('addr_none'))}</div>`; return; }
+    box.innerHTML = `<div class="ar-head">${CM.esc(I18N.t('addr_pick'))}</div>` + addrResults.map((r, i) =>
+      `<button type="button" data-pick="${i}">${CM.esc(r.label)}${r.approximate ? `<span class="ar-note">${CM.esc(I18N.t('addr_ward'))}</span>` : ''}</button>`).join('') +
+      (d.attribution ? `<div class="ar-head">${CM.esc(d.attribution)}</div>` : '');
+  } catch (e) { box.innerHTML = `<div class="ar-head">${CM.esc(e.message)}</div>`; }
+}
+function pickAddress(i) {
+  const r = addrResults[i]; if (!r) return;
+  setPin(r.lat, r.lng, 'search'); locAccuracy = null;
+  if (pickMap) pickMap.setView([r.lat, r.lng], r.approximate ? 15 : 17);
+  geocoded = r.approximate ? null : r.label;
+  if (!r.approximate && (!$('address').value.trim() || addressAutofilled)) {
+    $('address').value = r.label.slice(0, 300); addressAutofilled = true;
   }
-  $('photoImg').src = URL.createObjectURL(f); box.hidden = false;
+  $('addrResults').hidden = true;
+  $('geoInfo').textContent = `${I18N.t('addr_set')} ${r.label}. ${I18N.t('geo_adjust')}`;
+}
+
+/* ---------- photos / videos (1 to LIMITS.max_files, uploaded as they are added) ---------- */
+const fill = (s) => s.replace('{n}', LIMITS.max_files).replace('{s}', LIMITS.max_video_seconds).replace('{mb}', LIMITS.max_video_mb);
+const isVideoFile = (f) => /^video\//.test(f.type) || /\.(mp4|mov|m4v|webm|3gp)$/i.test(f.name || '');
+const isPhotoFile = (f) => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name || '');
+
+function addMediaFiles(input) {
+  const files = Array.from(input.files || []); input.value = '';
+  const free = LIMITS.max_files - media.length;
+  if (files.length > free) CM.toast(fill(I18N.t('media_too_many')), 'err');
+  files.slice(0, Math.max(0, free)).forEach(addOne);
+}
+
+async function addOne(file) {
+  const video = isVideoFile(file);
+  if (!video && !isPhotoFile(file)) { CM.toast(I18N.t('media_unsupported'), 'err'); return; }
+  const item = { key: Math.random().toString(36).slice(2), kind: video ? 'video' : 'photo',
+                 url: URL.createObjectURL(file), id: null, state: 'busy', msg: I18N.t('media_uploading') };
+  media.push(item); renderMedia();
+  try {
+    let blob = file;
+    if (video) {
+      if (file.size > LIMITS.max_video_mb * 1048576) throw new Error(fill(I18N.t('media_video_big')));
+      const secs = await videoSeconds(item.url);
+      if (Number.isFinite(secs) && secs > LIMITS.max_video_seconds + 0.5) throw new Error(fill(I18N.t('media_video_long')));
+    } else {
+      blob = await shrinkPhoto(file);
+    }
+    const d = await CM.api('/api/media', { method: 'POST', raw: blob });
+    if (!media.includes(item)) { CM.api(`/api/media/${encodeURIComponent(d.media_id)}`, { method: 'DELETE' }).catch(() => {}); return; }
+    item.id = d.media_id; item.state = 'ready';
+    item.msg = d.kind === 'video' && d.duration_s ? `${d.duration_s.toFixed(1)} s` : I18N.t('media_ready');
+  } catch (e) {
+    item.state = 'error';
+    item.msg = (e.message || I18N.t('media_failed')) + ((e.reasons || []).length ? ' — ' + e.reasons.join('; ') : '');
+  }
+  renderMedia();
+}
+
+/** Photos above ~4.5 MB (or in formats the server does not take, e.g. HEIC) are re-drawn as JPEG first. */
+async function shrinkPhoto(file) {
+  if (/^image\/(jpeg|png|webp)$/.test(file.type) && file.size <= 4.5 * 1048576) return file;
+  let bmp;
+  try { bmp = await createImageBitmap(file); } catch { throw new Error(I18N.t('media_unsupported')); }
+  const scale = Math.min(1, 2560 / Math.max(bmp.width, bmp.height));
+  const cv = document.createElement('canvas');
+  cv.width = Math.round(bmp.width * scale); cv.height = Math.round(bmp.height * scale);
+  cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+  const out = await new Promise(res => cv.toBlob(res, 'image/jpeg', 0.85));
+  if (!out) throw new Error(I18N.t('media_unsupported'));
+  return out;
+}
+
+function videoSeconds(url) {
+  return new Promise(res => {
+    const v = document.createElement('video'); let done = false;
+    const end = (x) => { if (!done) { done = true; res(x); } };
+    v.preload = 'metadata'; v.muted = true;
+    v.onloadedmetadata = () => end(v.duration); v.onerror = () => end(NaN);
+    setTimeout(() => end(NaN), 6000);
+    v.src = url;
+  });
+}
+
+function removeMedia(key) {
+  const i = media.findIndex(m => m.key === key); if (i < 0) return;
+  const [m] = media.splice(i, 1);
+  if (m.id) CM.api(`/api/media/${encodeURIComponent(m.id)}`, { method: 'DELETE' }).catch(() => {});
+  URL.revokeObjectURL(m.url); renderMedia();
+}
+
+function clearMedia() { media.forEach(m => URL.revokeObjectURL(m.url)); media = []; renderMedia(); }
+
+function renderMedia() {
+  const t = I18N.t;
+  $('mediaGrid').innerHTML = media.map(m => `
+    <div class="media-tile ${m.state === 'error' ? 'is-error' : ''} ${m.state === 'busy' ? 'is-busy' : ''}">
+      ${m.kind === 'video' ? `<video src="${CM.esc(m.url)}" muted playsinline preload="metadata" controls></video>`
+                           : `<img src="${CM.esc(m.url)}" alt="${CM.esc(t('media_label'))}"/>`}
+      <span class="mt-kind">${m.kind === 'video' ? '🎬' : '📷'}</span>
+      <div class="mt-bar"><span class="mt-state">${CM.esc(m.msg || '')}</span>
+        <button type="button" class="mt-remove" data-remove="${CM.esc(m.key)}">${CM.esc(t('media_remove'))}</button></div>
+    </div>`).join('');
+  $('mediaCount').textContent = `${media.length} / ${LIMITS.max_files}`;
+  const full = media.length >= LIMITS.max_files;
+  ['mediaCamera', 'mediaVideo', 'mediaPick'].forEach(id => { $(id).disabled = full; });
+  ['mediaCameraBtn', 'mediaVideoBtn', 'mediaPickBtn'].forEach(id => $(id).classList.toggle('is-disabled', full));
+  $('mediaHint').textContent = fill(t('media_hint'));
 }
 
 /* ---------- voice description (≤ 15 s, transcribed on the server) ---------- */
@@ -214,7 +333,9 @@ function formProblems() {
   if (!$('category').value) problems.push(I18N.t('err_category'));
   if ($('description').value.trim().length < 10) problems.push(I18N.t('err_description'));
   if (!pinSet) problems.push(I18N.t('err_location'));
-  if (!$('photo').files[0]) problems.push(I18N.t('err_photo'));
+  if (media.some(m => m.state === 'busy')) problems.push(I18N.t('err_media_busy'));
+  else if (media.some(m => m.state === 'error')) problems.push(I18N.t('err_media_failed'));
+  else if (CFG.require_issue_photo && !media.some(m => m.state === 'ready')) problems.push(I18N.t('err_photo'));
   return problems;
 }
 
@@ -231,7 +352,10 @@ function reviewComplaint(e) {
     ${inc && inc.checked ? `<p class="tiny muted">${CM.esc(t('review_translation'))}</p>` : ''}
     <div class="kv"><span class="muted small">${CM.esc(t('location'))}</span><span class="small">${CM.esc(pickLat.toFixed(5))}, ${CM.esc(pickLng.toFixed(5))}${locAccuracy ? ' (±' + CM.esc(locAccuracy) + ' m)' : ''}</span></div>
     ${$('address').value.trim() ? `<div class="kv"><span class="muted small">${CM.esc(t('address'))}</span><span class="small">${CM.esc($('address').value.trim())}</span></div>` : ''}
-    <img class="thumb" alt="" src="${CM.esc($('photoImg').src)}" style="margin-top:8px"/>
+    <div class="small" style="margin-top:8px"><strong>${CM.esc(t('review_media'))}</strong> (${media.length})</div>
+    <div class="media-row" style="margin-top:4px">${media.map(m => m.kind === 'video'
+      ? `<video class="thumb" src="${CM.esc(m.url)}" muted playsinline preload="metadata"></video>`
+      : `<img class="thumb" alt="" src="${CM.esc(m.url)}"/>`).join('')}</div>
     <p class="tiny muted" style="margin-top:8px">${CM.esc(t('review_privacy'))}</p>`;
   $('reportForm').hidden = true; $('reviewPanel').hidden = false; $('reviewSend').focus();
 }
@@ -245,15 +369,16 @@ async function sendComplaint() {
       const body = { category: $('category').value, description: $('description').value.trim(),
                      latitude: pickLat, longitude: pickLng, address: $('address').value.trim() || null,
                      language: I18N.lang, location_source: locSource, location_accuracy_m: locAccuracy,
-                     geocoded_address: geocoded, image: await CM.fileToDataURL($('photo').files[0]) };
+                     geocoded_address: geocoded, media_ids: media.filter(m => m.state === 'ready').map(m => m.id) };
       const inc = $('includeTr');
       if (assist && !assistStale && inc && inc.checked && $('trText').value.trim()) body.translation_en = $('trText').value.trim();
       if (assist && !assistStale) body.assistant_engine = assist.suggestion.engine;
       if (voice) body.voice_id = voice.id;
       const d = await CM.api('/api/complaints', { method: 'POST', body });
       showResult(d);
-      $('reportForm').reset(); $('descCount').textContent = '0'; pinSet = false; clearAssist(); discardRecording(); previewPhoto();
-      locSource = 'map'; locAccuracy = null; geocoded = null; $('geoInfo').textContent = '';
+      $('reportForm').reset(); $('descCount').textContent = '0'; pinSet = false; clearAssist(); discardRecording(); clearMedia();
+      locSource = 'map'; locAccuracy = null; geocoded = null; addressAutofilled = false; $('geoInfo').textContent = '';
+      $('addrResults').hidden = true;
       $('locText').textContent = I18N.t('loc_hint');
       $('reviewPanel').hidden = true; $('reportForm').hidden = false;
       loadStats(); loadMine(); loadFeed();
@@ -284,7 +409,7 @@ function showResult(d) {
         <span class="badge">${CM.esc(c.department)}</span>
         <span class="badge" title="Which engine classified this report">${CM.esc(CM.engineLabel(c.engine))}</span>
       </div>
-      ${d.photo ? `<p class="tiny muted" style="margin:8px 0 0">Photo: ${CM.esc(CM.checkLabel(d.photo.verdict))}.</p>` : ''}
+      ${d.attachments ? `<p class="tiny muted" style="margin:8px 0 0">Attached: ${CM.esc(d.attachments.photos)} photo(s), ${CM.esc(d.attachments.videos)} video(s)${d.photo ? ' · main photo ' + CM.esc(CM.checkLabel(d.photo.verdict)) : ''}.</p>` : ''}
       ${d.area && d.area.ward ? `<p class="tiny muted" style="margin:4px 0 0">Area: ${CM.esc(d.area.ward)} (nearest ward centre — approximate).</p>` : ''}
       ${d.asset_match ? `<p class="tiny muted" style="margin:4px 0 0">Likely related to ${CM.esc(d.asset_match.type_label)} ${CM.esc(d.asset_match.asset_code)} (${Math.round(d.asset_match.distance_m)} m away).</p>` : ''}
       <p class="small" style="margin:10px 0 0"><strong>What happens next:</strong> ${CM.esc(d.next_step)}</p>
@@ -332,7 +457,7 @@ function complaintCard(c) {
         <span class="badge ${CM.sClass(c.status)}">${CM.esc(stText(c.status))}</span>
       </div>
       <div class="complaint-body">
-        ${c.has_photo ? `<img class="thumb" alt="Your photo" data-auth-src="/api/complaints/${c.id}/photo"/>` : ''}
+        <div class="media-row">${CM.mediaThumbs(c)}</div>
         <div>
           <p class="small" style="margin:0">${CM.esc(c.description)}</p>
           ${c.language && c.language.translation_en ? `<p class="tiny muted" style="margin:6px 0 0">English translation you reviewed: ${CM.esc(c.language.translation_en)}</p>` : ''}

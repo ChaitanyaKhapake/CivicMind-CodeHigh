@@ -74,6 +74,10 @@ instead of 403 where revealing existence would leak information.
 | GET | `/api/complaints/{id}/voice` | owner · O · A | private audio, `no-store` | — |
 | GET | `/api/voice/policy` | any | retention and provider disclosure | — |
 | GET | `/api/geo/reverse` | any | opt-in provider; service-area check before sending; cache; 1 req/s app-wide; 6/min per user | — |
+| GET | `/api/geo/search?q=` | any | ward names offline; provider only when enabled, bounded to the service area, explicit search only (no autocomplete), cached, shares the 1 req/s spacing and 6/min limit | — |
+| POST | `/api/media` | C | raw bytes; type sniffed from content; photos re-encoded (EXIF/GPS removed) + blank/re-use checks; videos container-parsed (video track, declared length ≤ 30 s, MP4/MOV location tags blanked); own 30 MB request cap on this path only; 20 per 10 min | — |
+| DELETE | `/api/media/{id}` | C own, unattached only | file deleted | — |
+| GET | `/api/complaints/{id}/media/{mid}` | owner · O · A | private file, `no-store`; uploads are claimed once (same user, ≤ 3 per report) inside the complaint transaction | — |
 | POST | `/api/assistant/chat` | C | knowledge base + caller's OWN complaints only; AI text rejected if it adds numbers/links/e-mails; throttled | — |
 | GET | `/api/contractors` | O · A | contact details are staff-only | — |
 | POST | `/api/admin/contractors[/{id}/status]` | A | new contractors start unverified | activity |

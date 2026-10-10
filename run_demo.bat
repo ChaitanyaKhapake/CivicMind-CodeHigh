@@ -11,6 +11,9 @@ cd /d "%~dp0backend"
 set "CIVICMIND_DB=%~dp0data\demo\civicmind_demo.db"
 set "CIVICMIND_EVIDENCE_DIR=%~dp0data\demo\evidence"
 set "CIVICMIND_DEMO_MODE=1"
+REM Address search and "Use my current location" address autofill via the public Nominatim service
+REM (OpenStreetMap; max 1 request/s, explicit clicks only). Set CIVICMIND_REVERSE_GEOCODER=none to turn off.
+if not defined CIVICMIND_REVERSE_GEOCODER set "CIVICMIND_REVERSE_GEOCODER=nominatim"
 
 python -m pip install -q -r requirements.txt
 if errorlevel 1 ( echo  Dependency install failed. & pause & exit /b 1 )
