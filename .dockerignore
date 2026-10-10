@@ -14,3 +14,8 @@ data/demo/
 **/.pytest_cache/
 backend/tests/
 *.docx
+
+# The citizen Android app is built separately; the web deployment never includes it
+mobile/
+dist/
+*.apk
