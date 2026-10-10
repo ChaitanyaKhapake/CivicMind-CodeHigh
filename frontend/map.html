@@ -55,7 +55,10 @@
     </div>
   </section>
 
-  <section class="map-legend" aria-label="Legend">
+  <section class="map-legend" id="mapLegend" aria-label="Legend">
+    <button type="button" class="legend-toggle" id="legendToggle" aria-expanded="false" aria-controls="legendBody">
+      <span>🗺️ Legend</span><span class="legend-caret" aria-hidden="true">▴</span></button>
+    <div id="legendBody" hidden>
     <div class="legend-title">Reports (by severity)</div>
     <div class="lrow"><span class="swatch round" style="background:#2E9E5B"></span>1–2 low</div>
     <div class="lrow"><span class="swatch round" style="background:#E0A106"></span>3 moderate</div>
@@ -69,6 +72,7 @@
       <div class="lrow"><span class="swatch flag">🚩</span>risk finding</div>
       <div class="legend-title">Utility networks</div>
       <div id="utilLegend"></div>
+    </div>
     </div>
   </section>
 

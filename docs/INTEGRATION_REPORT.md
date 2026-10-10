@@ -25,6 +25,8 @@ working · **BLOCKED** could not be verified (reason given) · **NOT IMPLEMENTED
 | Registry editing (connections, contacts, status) + import rollback | PASS | Tests: unverified on create, cross-utility/duplicate refused, rollback blocked by dependants, typed confirmation. |
 | Department-scoped officer access | NOT IMPLEMENTED | Departments are recorded on users, not enforced. |
 | Text-similarity complaint grouping | NOT IMPLEMENTED | The existing explainable grouping (category + distance + time) is kept. |
+| Street-following synthetic network (~6,100 records, 6 utilities) | PASS | Generated along OpenStreetMap street centre-lines (bundled extract, ODbL); test checks a sample of lines stays within 12 m of a street centre-line, every utility has > 300 records and no record is unconnected; core leak-scenario tests unchanged and passing. Browser check: parallel colour-coded utilities along Kothrud streets at zoom 17–18. |
+| Operations dashboard layout, collapsible map legend | PASS (visual check) | Live operations mini-map, open work orders, network summary and charts fill the former blank column; legend collapses and sits beside the filter panel (no overlap measured at 1280×1000). |
 | Utility registry, geometry, provenance | PASS | `test_utility_network.py`; asset panel verified in the browser on the demo DB. |
 | Deterministic tracing (up/down/both, limits, loops, gaps) | PASS | Tests for upstream source, nearest valve per branch, unknown-direction link not walked, loop detection, missing link not invented, hop limit, per-utility semantics. |
 | Isolation candidates | PASS | Candidates only, with path and verification state; admin verification changes the state; browser check. |
@@ -43,7 +45,7 @@ working · **BLOCKED** could not be verified (reason given) · **NOT IMPLEMENTED
 
 ## Test run (executed)
 
-`cd backend && python -m pytest` → **215 passed, 0 skipped** (Windows, Python 3.14.3, Node 25.8.1).
+`cd backend && python -m pytest` → **216 passed, 0 skipped** (Windows, Python 3.14.3, Node 25.8.1).
 
 | File | Tests |
 |---|---|
@@ -51,7 +53,7 @@ working · **BLOCKED** could not be verified (reason given) · **NOT IMPLEMENTED
 | test_media_and_search.py | 10 |
 | test_ai_and_integrity.py | 18 |
 | test_auth_permissions.py | 22 |
-| test_utility_network.py | 17 |
+| test_utility_network.py | 18 |
 | test_platform_features.py | 15 |
 | test_workflow.py | 14 |
 | test_infrastructure.py | 13 |

@@ -29,7 +29,106 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(() => { if (!document.hidden && !$('resolveModal').innerHTML) loadDashboard(); }, 30000);
 });
 
-function loadAll() { loadDashboard(); loadCharts(); loadUtilityFindings(); }
+function loadAll() { loadDashboard(); loadCharts(); loadUtilityFindings(); loadOpsMap(); loadWorkOrders(); loadNetSummary(); }
+
+/* ---------- utility network records by network, with verification share ---------- */
+async function loadNetSummary() {
+  const box = $('netSummary');
+  let m;
+  try { m = await CM.api('/api/utility/meta'); } catch (e) { box.innerHTML = emptyState(e.message); return; }
+  const types = m.utility_types.filter(t => t.count);
+  if (!types.length) { box.innerHTML = emptyState('No utility records yet. Admins can import them.'); return; }
+  const max = Math.max(...types.map(t => t.count));
+  const total = types.reduce((a, t) => a + t.count, 0);
+  const verified = (m.by_verification.find(v => v.verification_status === 'verified') || { c: 0 }).c;
+  box.innerHTML = types.map(t => `
+    <div class="net-row">
+      <span class="small"><span class="swatch" style="background:${CM.esc(t.color)}"></span> ${CM.esc(t.label)}</span>
+      <span class="net-bar"><span style="width:${Math.max(3, Math.round(t.count / max * 100))}%;background:${CM.esc(t.color)}"></span></span>
+      <strong class="small num">${CM.esc(t.count)}</strong>
+    </div>`).join('') + `
+    <p class="tiny muted" style="margin:10px 0 0">${CM.esc(total)} records · ${CM.esc(m.connections)} recorded connections ·
+      ${CM.esc(Math.round(verified / total * 100))}% verified${m.synthetic_assets ? ` · ${CM.esc(m.synthetic_assets)} synthetic (demo)` : ''}</p>`;
+}
+
+/* ---------- live operations map: open incidents + open reports over the utility network ---------- */
+const UT_COLORS = { water: '#1F6FE5', sewer: '#7A4FB5', electric: '#D08A00' };
+let opsMap = null, opsNet = null, opsPins = null, opsRenderer = null, opsSeq = 0;
+
+async function loadOpsMap() {
+  if (typeof L === 'undefined') { $('opsMap').innerHTML = emptyState('Map library could not load.'); return; }
+  if (!opsMap) {
+    opsMap = L.map('opsMap', { scrollWheelZoom: false, zoomControl: true }).setView([18.5040, 73.8100], 15);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(opsMap);
+    opsRenderer = L.canvas({ padding: 0.3 });
+    opsNet = L.layerGroup().addTo(opsMap);
+    opsPins = L.layerGroup().addTo(opsMap);
+    document.querySelectorAll('[data-ops-ut]').forEach(cb => cb.addEventListener('change', loadOpsNetwork));
+    opsMap.on('moveend', () => { clearTimeout(loadOpsMap.t); loadOpsMap.t = setTimeout(loadOpsNetwork, 250); });
+  }
+  let incs = [], reps = [];
+  try { [incs, reps] = await Promise.all([CM.api('/api/map/incidents'), CM.api('/api/map/complaints')]); }
+  catch (e) { $('opsMapNote').textContent = e.message; return; }
+  opsPins.clearLayers();
+  const open = incs.filter(i => i.status !== 'resolved');
+  const pts = [];
+  reps.filter(r => r.status !== 'resolved' && r.status !== 'rejected').forEach(r => {
+    pts.push([r.latitude, r.longitude]);
+    L.circleMarker([r.latitude, r.longitude], { renderer: opsRenderer, radius: 4, color: '#fff', weight: 1.5,
+      fillColor: r.severity >= 4 ? '#D9342B' : r.severity >= 3 ? '#E0A106' : '#2E9E5B', fillOpacity: 1 })
+      .bindTooltip(`${CM.esc(r.public_id)} · ${CM.esc(r.category)}`).addTo(opsPins);
+  });
+  open.forEach(i => {
+    pts.push([i.centroid_lat, i.centroid_lng]);
+    const cls = 'p-' + String(i.priority_label || 'high').toLowerCase();
+    L.marker([i.centroid_lat, i.centroid_lng], { icon: L.divIcon({ className: '', iconSize: null,
+      html: `<span class="ops-inc ${CM.esc(cls)}">⚠ ${Number(i.report_count) || 0}</span>` }), keyboard: true,
+      title: `${i.public_id} — ${i.title}` })
+      .bindTooltip(`${CM.esc(i.public_id)} · ${CM.esc(i.title)} · ${CM.esc(i.priority_label)}`)
+      .on('click', () => { location.href = 'incident.html?id=' + encodeURIComponent(i.id); })
+      .addTo(opsPins);
+  });
+  // Frame the open incidents (where work is happening); fall back to open reports.
+  const focus = open.length ? open.map(i => [i.centroid_lat, i.centroid_lng]) : pts;
+  if (!loadOpsMap.fitted && focus.length) { opsMap.fitBounds(focus, { padding: [60, 60], maxZoom: 16 }); loadOpsMap.fitted = true; }
+  $('opsMapNote').textContent = `${open.length} open incident(s) and ${pts.length - open.length} open report(s) over the recorded utility network. Click an incident to open it.`;
+  loadOpsNetwork();
+}
+
+async function loadOpsNetwork() {
+  const types = [...document.querySelectorAll('[data-ops-ut]:checked')].map(cb => cb.dataset.opsUt);
+  const seq = ++opsSeq;
+  if (!types.length) { opsNet.clearLayers(); return; }
+  const b = opsMap.getBounds();
+  const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map(v => v.toFixed(5)).join(',');
+  let fc;
+  try { fc = await CM.api(`/api/utility/assets?bbox=${bbox}&utility_types=${types.join(',')}&limit=5000`); }
+  catch { return; }      // the network layer is context; the incidents above still show
+  if (seq !== opsSeq) return;
+  opsNet.clearLayers();
+  fc.features.forEach(f => {
+    if (f.geometry.type !== 'LineString') return;
+    const p = f.properties;
+    L.polyline(f.geometry.coordinates.map(c => [c[1], c[0]]), { renderer: opsRenderer, interactive: false,
+      color: UT_COLORS[p.utility_type] || '#5B6B82', weight: ['main', 'trunk_sewer'].includes(p.asset_type) ? 2.4 : 1.3,
+      opacity: .8, dashArray: p.verification_status !== 'verified' ? '5 4' : null }).addTo(opsNet);
+  });
+}
+
+/* ---------- open work orders (contractor, due date, overdue flag) ---------- */
+async function loadWorkOrders() {
+  const box = $('woList');
+  let rows;
+  try { rows = await CM.api('/api/work-orders?status=open'); } catch (e) { box.innerHTML = emptyState(e.message); return; }
+  $('woCount').textContent = rows.length;
+  box.innerHTML = rows.slice(0, 6).map(w => `
+    <div class="wo-row">
+      <a class="small link" href="incident.html?id=${encodeURIComponent(w.incident_id)}"><strong>${CM.esc(w.public_id)}</strong> · ${CM.esc(w.task)}</a>
+      <span class="badge">${CM.esc(CM.titleCase(String(w.status).replace(/_/g, ' ')))}</span>
+      <span class="tiny muted">${CM.esc(w.contractor ? w.contractor.name : (w.team_name || w.department || 'Internal team'))}</span>
+      <span class="tiny wo-due ${w.overdue ? 'overdue' : ''}">${w.est_completion ? (w.overdue ? 'Overdue · ' : 'Due ') + CM.esc(CM.fmtDate(w.est_completion)) : 'No date'}</span>
+    </div>`).join('') || emptyState('No open work orders.');
+}
 
 /* Rule-based utility findings (each names its rule and triggering records). */
 async function loadUtilityFindings() {

@@ -88,6 +88,25 @@ start-up — only by `seed_demo.py`, which refuses to touch a database that is n
   configured it may only rephrase those facts; its text is rejected if it mentions any ID not in the evidence.
   Fictional contacts are never treated as usable operator contacts.
 
+## Demo utility network (synthetic, laid along real streets)
+
+`seed_demo.py` builds a **fictional** network of about 6,100 records for Kothrud, Pune: water supply (mains, distribution
+pipes, valves, hydrants, five reservoirs), sewerage (sewers, manholes, outfall), stormwater drains, electricity
+(11 kV / LT cables, RMUs, transformers, two substations), gas (mains, services, valves, regulators, city gate) and
+telecom (fibre ducts, cabinets, chambers, exchange). Every line follows a **real street centre-line**, because
+almost all buried urban utilities run under the road; each network keeps its own position across the road
+(storm drain at the edge, then electricity, water, sewer in the centre, gas, telecom), wider roads spreading them
+further apart. The map draws trunk lines heavier, shows fittings when zoomed in, and dashes unverified records.
+
+- Streets: `data/osm/kothrud_streets.json`, an OpenStreetMap extract (© OpenStreetMap contributors, ODbL,
+  retrieved via the Overpass API on 2026-10-10). The **roads are real; every utility record is invented**.
+- Generator: `services/utility_network/street_network.py` — deterministic (same IDs every run). Supply networks are
+  grown from their sources (loops recorded as unknown-direction links), sewer and storm as gravity trees towards
+  an outfall, telecom as undirected links. About 10 % of records are marked unverified/approximate on purpose.
+- The leak walkthrough (`WM-DEMO-03`, valves `V-DEMO-01…04`, the loop and the unrecorded old main) keeps its IDs
+  and connections and sits on a real street; re-running the seed moves an older demo database's synthetic
+  records and fictional leak reports onto the streets without deleting anything.
+
 ## GIS import formats
 
 Admin → *Import utility records* (preview first, then confirm):

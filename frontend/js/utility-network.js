@@ -3,7 +3,7 @@
    All server text goes through CM.esc; actions use data-* attributes. Nothing here is
    inferred in the browser: connections, traces and candidates come from the API. */
 const UtilityLayer = (() => {
-  let map = null, meta = null, group = null, highlight = null, features = {}, selected = null, loadTimer = null;
+  let map = null, meta = null, group = null, highlight = null, features = {}, selected = null, loadTimer = null, loadSeq = 0;
   const enabled = new Set();
   const $ = (id) => document.getElementById(id);
   const esc = (s) => CM.esc(s);
@@ -134,32 +134,56 @@ const UtilityLayer = (() => {
     return [w, s, e, n].map(v => v.toFixed(5)).join(',');
   }
 
+  // Trunk lines are drawn heavier than local pipes/cables; small fittings appear only when zoomed in.
+  const TRUNK = new Set(['main', 'trunk_sewer', 'gas_main', 'feeder']);
+  const isTrunk = (p) => TRUNK.has(p.asset_type) || p.criticality === 'critical' || p.criticality === 'high';
+  const lineWeight = (p, z) => {
+    const big = isTrunk(p);
+    return z >= 18 ? (big ? 5 : 3) : z >= 17 ? (big ? 3.5 : 2) : z >= 15 ? (big ? 2.6 : 1.4) : (big ? 2 : 1);
+  };
+  const pointVisible = (p, z) => p.is_source || (p.is_control_device && z >= 17) || z >= 18 || p.asset_id === selected;
+  // Draw order: trunks under local lines, and the centre-line networks (sewer/water) under the side ones,
+  // so every network stays visible where they run side by side in the same street.
+  const UT_ORDER = { sewer: 0, water: 1, gas: 2, storm: 3, telecom: 4, electric: 5 };
+  const drawOrder = (f) => (f.geometry.type === 'LineString' ? 0 : 100) + (isTrunk(f.properties) ? 0 : 10)
+    + (UT_ORDER[f.properties.utility_type] ?? 6);
+  let renderer = null;
+
   async function load() {
-    group.clearLayers(); features = {};
-    if (!enabled.size) { $('utilCount').textContent = '0'; return; }
-    const params = new URLSearchParams({ bbox: bboxParam(), utility_types: [...enabled].join(',') });
+    const seq = ++loadSeq;
+    if (!enabled.size) { group.clearLayers(); features = {}; $('utilCount').textContent = '0'; return; }
+    const params = new URLSearchParams({ bbox: bboxParam(), utility_types: [...enabled].join(','), limit: '5000' });
     if ($('utilVerif').value) params.set('verification', $('utilVerif').value);
     let fc;
     try { fc = await CM.api('/api/utility/assets?' + params.toString()); }
     catch (e) { $('utilCount').textContent = '!'; return CM.fail(e); }
-    fc.features.forEach(f => {
+    if (seq !== loadSeq) return;                       // a newer pan/zoom already asked again
+    group.clearLayers(); features = {};
+    renderer = renderer || L.canvas({ padding: 0.4, tolerance: 6 });
+    const z = map.getZoom();
+    let shown = 0;
+    fc.features.slice().sort((a, b) => drawOrder(a) - drawOrder(b)).forEach(f => {
       features[f.id] = f;
       const p = f.properties, col = colorOf(p.utility_type), dashed = p.verification_status !== 'verified';
       let layer;
       if (f.geometry.type === 'LineString') {
-        layer = L.polyline(f.geometry.coordinates.map(c => [c[1], c[0]]), { color: col, weight: 5, opacity: .85,
-          dashArray: dashed ? '8 6' : null });
+        layer = L.polyline(f.geometry.coordinates.map(c => [c[1], c[0]]), { renderer, color: col,
+          weight: lineWeight(p, z), opacity: .9, lineCap: 'butt', dashArray: dashed ? '7 5' : null });
       } else {
-        layer = L.circleMarker([f.geometry.coordinates[1], f.geometry.coordinates[0]], {
-          radius: p.is_source ? 9 : p.is_control_device ? 6 : 5, weight: p.is_control_device ? 3 : 2,
+        if (!pointVisible(p, z)) return;
+        layer = L.circleMarker([f.geometry.coordinates[1], f.geometry.coordinates[0]], { renderer,
+          radius: p.is_source ? 8 : p.is_control_device ? (z >= 18 ? 5 : 3.5) : (z >= 19 ? 4 : 3),
+          weight: p.is_control_device ? 2 : 1.2,
           color: p.is_control_device ? '#0F9D91' : '#fff', fillColor: p.is_control_device ? '#fff' : col, fillOpacity: 1,
           dashArray: dashed ? '3 3' : null });
       }
+      shown++;
       layer.bindTooltip(`${esc(p.asset_id)} · ${esc(p.name)}`, { sticky: true });
       layer.on('click', () => select(p.asset_id));
       layer.addTo(group);
     });
     $('utilCount').textContent = fc.features.length + (fc.truncated ? '+' : '');
+    $('utilCount').title = shown < fc.features.length ? 'Zoom in to see valves, manholes and other fittings' : '';
   }
 
   async function select(assetId, zoom) {

@@ -8,7 +8,6 @@ from services import ai
 from services.utility_network import demo_data, graph, registry
 from conftest import file_complaint
 
-LEAK = (18.50128, 73.81309)
 
 
 @pytest.fixture()
@@ -24,7 +23,8 @@ def _leak_incident(make_user):
     citizens = [make_user("citizen") for _ in range(3)]
     last = None
     for i, c in enumerate(citizens):
-        last = file_complaint(c, "Water Leakage", LEAK[0] + i * 0.0001, LEAK[1],
+        lat, lng = demo_data.LEAK_REPORTS[i][2:4]          # on the leak street, like the demo reports
+        last = file_complaint(c, "Water Leakage", lat, lng,
                               text=f"Report {i}: water gushing from the road in Lane 7, the road is flooding.")
         assert last.status_code == 200, last.text
     assert last.json()["incident_id"]
@@ -65,7 +65,8 @@ def test_asset_list_bbox_and_filters(client, make_user, net):
     assert fc["type"] == "FeatureCollection" and fc["features"]
     assert {f["properties"]["utility_type"] for f in fc["features"]} == {"water"}
     assert all("phone" not in json.dumps(f) for f in fc["features"])  # contacts never ride along on map data
-    small = off.get("/api/utility/assets", params={"bbox": "73.8128,18.5010,73.8134,18.5016"}).json()
+    la, lo = demo_data.LEAK_POINT
+    small = off.get("/api/utility/assets", params={"bbox": f"{lo - 0.0003},{la - 0.0003},{lo + 0.0003},{la + 0.0003}"}).json()
     assert "WM-DEMO-03" in {f["id"] for f in small["features"]}
     assert "SUB-DEMO-01" not in {f["id"] for f in small["features"]}
     for bad in ("1,2,3", "73.9,18.4,73.8,18.6", "70,10,75,20", "a,b,c,d"):
@@ -83,6 +84,30 @@ def test_asset_detail_shows_records_not_guesses(client, make_user, net):
     j4 = make_user("officer").get("/api/utility/assets/J-DEMO-04").json()
     assert "No technical attributes" in " ".join(j4["notes"])
     assert make_user("officer").get("/api/utility/assets/NOPE-1").status_code == 404
+
+
+def test_demo_network_follows_real_streets():
+    """Every synthetic line runs along a street centre-line (OpenStreetMap extract), every
+    utility type is present at city scale, and nothing is left unconnected."""
+    from services.utility_network import street_network as sn
+    streets = sn.Streets()
+    centre = [s["xy"] for s in streets.segs]
+    lines = [a for a in demo_data.ASSETS if a[4]["type"] == "LineString"]
+    off_street = []
+    for aid, _ut, _at, _name, geom, _extra in lines[::7]:     # a deterministic sample of ~1 in 7 lines
+        for lng, lat in geom["coordinates"]:
+            p = sn.to_xy(lat, lng)
+            if min(sn.seg_distance(p, xy)[0] for xy in centre) > 12:   # wider roads hold utilities further out
+                off_street.append(aid)
+                break
+    assert not off_street, off_street[:5]
+    by_type = {}
+    for a in demo_data.ASSETS:
+        by_type[a[1]] = by_type.get(a[1], 0) + 1
+    assert all(by_type.get(ut, 0) > 300 for ut in ("water", "sewer", "storm", "electric", "gas", "telecom")), by_type
+    linked = {c[1] for c in demo_data.CONNECTIONS} | {c[2] for c in demo_data.CONNECTIONS}
+    assert {a[0] for a in demo_data.ASSETS} <= linked
+    assert "© OpenStreetMap contributors" in demo_data.STREETS_ATTRIBUTION
 
 
 # ------------------------------------------------------------------ tracing
@@ -116,7 +141,7 @@ def test_both_direction_trace_detects_the_loop(net):
 
 
 def test_missing_link_is_reported_not_invented(net):
-    # WM-DEMO-101 ends ~11 m from J-DEMO-03 on the map, but no connection is recorded.
+    # WM-DEMO-101 starts ~10 m from J-DEMO-03 on the map, but no connection is recorded.
     from services.utility_network import geometry
     a, j3 = registry.get_row("WM-DEMO-101"), registry.get_row("J-DEMO-03")
     lat, lng = geometry.representative_point(j3["geometry"])

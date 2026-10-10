@@ -17,7 +17,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (typeof L === 'undefined') { $('map').innerHTML = emptyState('The map library could not load. Check your connection.'); return; }
   let center = { lat: 18.5204, lng: 73.8567 };
   try { center = (await CM.api('/api/config')).city_center; } catch { /* default */ }
-  map = L.map('map').setView([center.lat, center.lng], 13);
+  map = L.map('map', { zoomControl: false }).setView([center.lat, center.lng], 13);
+  L.control.zoom({ position: 'topright' }).addTo(map);    // keeps the filter panel (top-left) clear
+  initLegendToggle();
   const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors', maxZoom: 19 }).addTo(map);
   let tileErrors = 0;
   tiles.on('tileerror', () => { if (++tileErrors > 4) $('tileWarn').hidden = false; });
@@ -35,6 +37,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (isStaff && typeof UtilityLayer !== 'undefined') UtilityLayer.mount(map);
   setInterval(() => { if (!document.hidden) loadAll(); }, 60000);
 });
+
+/* Legend: collapsed by default so it never covers the filters; the choice is remembered. */
+function initLegendToggle() {
+  const btn = $('legendToggle'), body = $('legendBody'), box = $('mapLegend');
+  let open = false;
+  try { open = localStorage.getItem('cm_legend_open') === '1'; } catch { /* private mode */ }
+  const set = (v) => {
+    open = v; body.hidden = !v; box.classList.toggle('is-open', v); btn.setAttribute('aria-expanded', String(v));
+    try { localStorage.setItem('cm_legend_open', v ? '1' : '0'); } catch { /* private mode */ }
+  };
+  set(open);
+  btn.addEventListener('click', () => set(!open));
+}
 
 async function loadAll(fit) {
   try {

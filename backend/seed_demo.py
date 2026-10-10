@@ -182,7 +182,29 @@ def main():
     from services.utility_network import demo_data, findings as utility_findings
     with db(immediate=True) as conn:
         added = demo_data.seed(conn)
-    print(f"Utility network (synthetic): {added}")
+        moved = demo_data.relocate_leak_reports(conn)
+    print(f"Utility network (synthetic, laid along OpenStreetMap streets): {added}")
+    if moved:
+        # The fictional leak reports moved onto the leak street: refresh the stored utility candidates
+        # (system suggestions only — an officer's confirm/reject decision is kept as it is).
+        from services.utility_network import matching
+        for iid in moved:
+            inc = query("SELECT * FROM incidents WHERE id=?", (iid,), one=True)
+            found, _ = matching.compute(inc)
+            keep = {c["asset"]["id"]: c for c in found}
+            with db() as conn:
+                for r in conn.execute("SELECT asset_id, status FROM incident_utility_assets WHERE incident_id=?",
+                                      (iid,)).fetchall():
+                    c = keep.get(r["asset_id"])
+                    if c:
+                        conn.execute("""UPDATE incident_utility_assets SET distance_m=?, reason=?
+                                        WHERE incident_id=? AND asset_id=?""",
+                                     (c["distance_m"], c["reason"], iid, r["asset_id"]))
+                    elif r["status"] == "candidate":
+                        conn.execute("DELETE FROM incident_utility_assets WHERE incident_id=? AND asset_id=? "
+                                     "AND status='candidate'", (iid, r["asset_id"]))
+            matching.refresh(inc)
+        print(f"  moved the fictional leak reports of incident(s) {moved} onto the leak street")
     if get_meta("utility_demo_reports") != "1":
         for who, text, lat, lng, hours in demo_data.LEAK_REPORTS:
             u = citizens[who % len(citizens)]
